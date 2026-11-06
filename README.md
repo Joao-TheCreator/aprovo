@@ -22,6 +22,7 @@ exportação de conta. Falta: deploy na Vercel, app na Meta, revisão jurídica 
 | [08 · Decisões e riscos](docs/08-decisoes-e-riscos.md) | ADRs, riscos com mitigação, dependências externas a providenciar |
 | [09 · Design system](docs/09-design-system.md) | Cores, tipografia, status, componentes |
 | [10 · Deploy e Meta](docs/10-deploy-e-meta.md) | Passo a passo: Neon, R2, Resend, Google, Vercel, app na Meta e conexão da conta do Instagram |
+| [11 · Passagem de bastão](docs/11-passagem-de-bastao.md) | Estado real da infra (Neon, R2, Resend, Google, Vercel) e o que falta na Meta |
 | [Legal](docs/legal/README.md) | Rascunhos de Política de Privacidade, Termos de Uso e Instruções de exclusão de dados (LGPD + exigências da Meta) |
 
 ## Resumo do que precisamos

@@ -3,6 +3,8 @@
 Guia para colocar o APROVO no ar em tiers gratuitos e permitir que uma conta profissional do
 Instagram (ex.: a do Samuel) seja conectada para os testes de integração.
 
+> Estado real da infraestrutura em `docs/11-passagem-de-bastao.md` (produção: https://aprovo-six.vercel.app).
+>
 > Os nomes de menus da Meta e da Vercel mudam com frequência e a rede desta sessão não acessa
 > `developers.facebook.com`. Onde o nome exato do botão puder variar, está marcado **[≈]**.
 
@@ -70,6 +72,7 @@ Instagram (ex.: a do Samuel) seja conectada para os testes de integração.
 | `META_APP_ID`, `META_APP_SECRET` | do passo 6 (Instagram App ID e Secret) |
 | `META_REDIRECT_URI` | `https://<projeto>.vercel.app/api/instagram/callback` |
 | `IG_FALLBACK_PROVIDER` | `none` |
+| `CRON_SECRET` | string longa aleatória; protege `/api/instagram/refresh` (cron semanal em `vercel.json`) |
 
 4. Deploy. Depois do primeiro deploy, rodar as migrations uma vez a partir da sua máquina:
 
