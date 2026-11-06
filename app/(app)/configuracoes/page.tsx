@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getCurrentWorkspace, requireUser } from "@/lib/auth/require";
 import { getWorkspaceConnection, isOAuthConfigured } from "@/lib/instagram/oauth";
+import { DeleteAccountButton } from "./DeleteAccountButton";
 import { DisconnectButton } from "./DisconnectButton";
 
 export const metadata = { title: "Configurações" };
@@ -138,9 +139,13 @@ export default async function ConfiguracoesPage({
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a href="/api/auth/signout">Sair</a>
           </Button>
-          <Button variant="outline" disabled title="Em breve">
-            Excluir conta (em breve)
+          <Button asChild variant="outline">
+            {/* File download from an API route: plain anchor is intended. */}
+            <a href="/api/account/export" download>
+              Exportar meus dados
+            </a>
           </Button>
+          <DeleteAccountButton />
         </div>
       </section>
       <Link href="/perfis" className="text-muted-foreground text-sm underline">

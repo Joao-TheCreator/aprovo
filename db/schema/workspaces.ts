@@ -1,4 +1,4 @@
-import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { index, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { id, timestamps } from "./columns";
 import { memberRole } from "./enums";
@@ -9,6 +9,8 @@ export const workspaces = pgTable("workspaces", {
   ownerId: uuid("owner_id")
     .notNull()
     .references(() => users.id),
+  /** Set when the owner deletes the account; rows are kept for audit retention. */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   ...timestamps,
 });
 

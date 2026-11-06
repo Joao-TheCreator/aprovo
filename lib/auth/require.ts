@@ -7,7 +7,7 @@
  * - requireWorkspaceForProfile(profileId): profile -> workspace -> membership check
  * Every Drizzle query on tenant data must be filtered by the workspace id returned here.
  */
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/db/client";
 import { profiles, workspaceMembers, workspaces } from "@/db/schema";
@@ -25,7 +25,7 @@ export async function getCurrentWorkspace(userId: string) {
     .select({ workspace: workspaces, role: workspaceMembers.role })
     .from(workspaceMembers)
     .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-    .where(eq(workspaceMembers.userId, userId))
+    .where(and(eq(workspaceMembers.userId, userId), isNull(workspaces.deletedAt)))
     .orderBy(asc(workspaceMembers.createdAt))
     .limit(1);
   return row ? { ...row.workspace, role: row.role } : null;

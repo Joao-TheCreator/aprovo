@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   // Cache Components stay off in the MVP: the app is authenticated and dynamic, and the
   // Suspense-everywhere requirement would slow the first phases. Revisit at launch.
   cacheComponents: false,
+  // Legal pages read docs/legal/*.md with fs; make sure the files ship with the serverless bundle.
+  outputFileTracingIncludes: { "/legal/[slug]": ["./docs/legal/*.md"] },
   turbopack: {
     rules: {
       "*.css": {

@@ -14,15 +14,20 @@ const DEFAULT_ERROR = "Não foi possível entrar. Tente novamente.";
 export default async function EntrarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; deleted?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, deleted } = await searchParams;
   const buttonBase =
     "h-12 w-full rounded-full px-6 text-base font-medium transition-opacity hover:opacity-90";
 
   return (
     <div className="space-y-4">
       <h1 className="text-center text-xl font-semibold">Entrar</h1>
+      {deleted === "1" ? (
+        <p role="status" className="bg-secondary rounded-2xl px-4 py-3 text-sm">
+          Sua conta foi excluída.
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="bg-secondary rounded-2xl px-4 py-3 text-sm">
           {ERRORS[error] ?? DEFAULT_ERROR}
