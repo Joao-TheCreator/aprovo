@@ -1,10 +1,12 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 
+import { StatusPill } from "@/components/feed/StatusPill";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -16,7 +18,15 @@ import {
 import type { FeedItem } from "@/lib/profiles/contracts";
 import { setImportedPostHidden } from "@/lib/profiles/actions";
 
-export function PostSheet({ item, onClose }: { item: FeedItem | null; onClose: () => void }) {
+export function PostSheet({
+  item,
+  profileId,
+  onClose,
+}: {
+  item: FeedItem | null;
+  profileId: string;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -77,10 +87,22 @@ export function PostSheet({ item, onClose }: { item: FeedItem | null; onClose: (
             </Button>
           </>
         ) : item ? (
-          <SheetHeader>
-            <SheetTitle>Publicação planejada</SheetTitle>
-            <SheetDescription>Detalhes em breve (Fase 2)</SheetDescription>
-          </SheetHeader>
+          <>
+            <SheetHeader>
+              <SheetTitle>Publicação planejada</SheetTitle>
+              <SheetDescription>
+                {item.postKind === "video" ? "Vídeo" : "Post"}
+                {item.mediaCount > 1 ? ` · ${item.mediaCount} fotos` : ""}
+              </SheetDescription>
+            </SheetHeader>
+            <StatusPill status={item.status} className="self-start" />
+            {item.caption ? (
+              <p className="line-clamp-4 text-[15px] whitespace-pre-line">{item.caption}</p>
+            ) : null}
+            <Button asChild>
+              <Link href={`/perfis/${profileId}/posts/${item.id}`}>Abrir publicação</Link>
+            </Button>
+          </>
         ) : (
           <SheetHeader>
             <SheetTitle>Publicação</SheetTitle>

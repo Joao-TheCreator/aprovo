@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { PhoneFrame } from "@/components/app/PhoneFrame";
+import { AddPostFab } from "@/components/feed/AddPostFab";
 import { FeedGrid } from "@/components/feed/FeedGrid";
 import { FeedToolbar } from "@/components/feed/FeedToolbar";
 import { InstagramHeader } from "@/components/feed/InstagramHeader";
@@ -88,7 +89,8 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
         )}
       </PhoneFrame>
 
-      <PostSheet item={selected} onClose={() => setSelected(null)} />
+      <PostSheet item={selected} profileId={profile.id} onClose={() => setSelected(null)} />
+      <AddPostFab profileId={profile.id} />
     </div>
   );
 }

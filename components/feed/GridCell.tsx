@@ -1,5 +1,6 @@
 import { Copy, EyeOff, Play } from "lucide-react";
 
+import { CroppedImage } from "@/components/media/CroppedImage";
 import { StatusPill } from "@/components/feed/StatusPill";
 import type { FeedItem } from "@/lib/profiles/contracts";
 import { cn } from "@/lib/utils";
@@ -29,24 +30,37 @@ export function GridCell({
       )}
     >
       {item.thumbUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={item.thumbUrl}
-          alt=""
-          loading="lazy"
-          className={cn("size-full object-cover", hidden && "opacity-40")}
-        />
+        item.kind === "planned" ? (
+          <CroppedImage
+            src={item.thumbUrl}
+            crop={item.gridCrop}
+            ratio={ratio}
+            className="size-full"
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.thumbUrl}
+            alt=""
+            loading="lazy"
+            className={cn("size-full object-cover", hidden && "opacity-40")}
+          />
+        )
       ) : (
         <span className={cn("block size-full", hidden && "opacity-40")} />
       )}
-      {item.mediaType === "carousel" ? (
+      {(
+        item.kind === "planned"
+          ? item.mediaCount > 1 && item.postKind !== "video"
+          : item.mediaType === "carousel"
+      ) ? (
         <Copy
           aria-hidden
           className="absolute top-2 right-2 size-5 text-white drop-shadow"
           strokeWidth={2}
         />
       ) : null}
-      {item.mediaType === "video" ? (
+      {(item.kind === "planned" ? item.postKind === "video" : item.mediaType === "video") ? (
         <Play
           aria-hidden
           className="absolute top-2 right-2 size-5 fill-white text-white drop-shadow"
