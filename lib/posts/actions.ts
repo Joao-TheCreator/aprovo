@@ -2,6 +2,7 @@
 /** Phase 2 publication actions. Every action authenticates and scopes by workspace. */
 import { and, eq, inArray, isNull, min, notInArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { db } from "@/db/client";
 import { mediaAssets, postMedia, posts } from "@/db/schema";
 import { requireWorkspaceForProfile } from "@/lib/auth/require";
@@ -90,16 +91,14 @@ export async function createPost(input: CreatePostInput): Promise<CreatePostResu
       .insert(posts)
       .values({ profileId, kind, status: "draft", position, createdBy: member.user.id })
       .returning({ id: posts.id });
-    await tx
-      .insert(postMedia)
-      .values(
-        assetIds.map((assetId, i) => ({
-          postId: created.id,
-          assetId,
-          sortOrder: i,
-          gridCrop: null,
-        })),
-      );
+    await tx.insert(postMedia).values(
+      assetIds.map((assetId, i) => ({
+        postId: created.id,
+        assetId,
+        sortOrder: i,
+        gridCrop: null,
+      })),
+    );
     await logActivity(tx, {
       profileId,
       actor: `user:${member.user.id}`,
@@ -267,5 +266,134 @@ export async function deletePost(postId: string): Promise<ActionResult> {
     });
   });
   revalidate(post.profileId, postId);
+  return OK;
+}
+
+const uuidList = z.array(z.string().uuid()).min(1).max(200);
+
+/**
+ * Reassigns `position` densely (0..n-1) for the profile's non-archived posts, in the given order.
+ * The unique index (profile_id, position) is checked per row, so we move every post of the profile
+ * to a distinct negative temporary position first, then write the final values.
+ * Archived posts are pushed after the active ones (n..) keeping their relative order.
+ */
+export async function reorderPosts(profileId: string, orderedIds: string[]): Promise<ActionResult> {
+  const parsedIds = uuidList.safeParse(orderedIds);
+  if (!z.string().uuid().safeParse(profileId).success) return fail("not_found");
+  if (!parsedIds.success) return fail("stale_order");
+  const member = await memberForProfile(profileId);
+  if (!member) return fail("not_found");
+  const ids = parsedIds.data;
+
+  const result = await db.transaction(async (tx) => {
+    const all = await tx
+      .select({ id: posts.id, archivedAt: posts.archivedAt, position: posts.position })
+      .from(posts)
+      .where(eq(posts.profileId, profileId))
+      .for("update");
+    const active = new Set(all.filter((p) => p.archivedAt === null).map((p) => p.id));
+    if (
+      ids.length !== active.size ||
+      new Set(ids).size !== ids.length ||
+      ids.some((id) => !active.has(id))
+    ) {
+      return false;
+    }
+    const archived = all
+      .filter((p) => p.archivedAt !== null)
+      .sort((a, b) => a.position - b.position)
+      .map((p) => p.id);
+    const finalOrder = [...ids, ...archived];
+
+    // Phase 1: park everything on unique temporary negative positions.
+    for (const [i, id] of finalOrder.entries()) {
+      await tx
+        .update(posts)
+        .set({ position: -(i + 1) - 1_000_000 })
+        .where(eq(posts.id, id));
+    }
+    // Phase 2: final dense positions.
+    for (const [i, id] of finalOrder.entries()) {
+      await tx.update(posts).set({ position: i }).where(eq(posts.id, id));
+    }
+    await logActivity(tx, {
+      profileId,
+      actor: `user:${member.user.id}`,
+      event: "posts.reordered",
+      payload: { count: ids.length },
+    });
+    return true;
+  });
+  if (!result) return fail("stale_order", "A grade mudou. Atualize a página e tente de novo.");
+  revalidatePath(`/perfis/${profileId}`);
+  return OK;
+}
+
+/** Loads posts for a bulk operation: all must exist and belong to one profile the user can access. */
+async function loadBulk(
+  postIds: string[],
+): Promise<{ rows: PostRow[]; member: Member; profileId: string } | null> {
+  const parsed = uuidList.safeParse(postIds);
+  if (!parsed.success) return null;
+  const ids = [...new Set(parsed.data)];
+  const rows = await db.select().from(posts).where(inArray(posts.id, ids));
+  if (rows.length !== ids.length) return null;
+  const profileId = rows[0].profileId;
+  if (rows.some((r) => r.profileId !== profileId)) return null;
+  const member = await memberForProfile(profileId);
+  return member ? { rows, member, profileId } : null;
+}
+
+export async function bulkArchivePosts(
+  postIds: string[],
+  archived: boolean,
+): Promise<ActionResult> {
+  const loaded = await loadBulk(postIds);
+  if (!loaded) return fail("not_found");
+  const { rows, member, profileId } = loaded;
+  await db.transaction(async (tx) => {
+    await tx
+      .update(posts)
+      .set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() })
+      .where(
+        inArray(
+          posts.id,
+          rows.map((r) => r.id),
+        ),
+      );
+    for (const r of rows) {
+      await logActivity(tx, {
+        profileId,
+        actor: `user:${member.user.id}`,
+        event: archived ? "post.archived" : "post.unarchived",
+        payload: { postId: r.id },
+      });
+    }
+  });
+  revalidatePath(`/perfis/${profileId}`);
+  return OK;
+}
+
+export async function bulkDeletePosts(postIds: string[]): Promise<ActionResult> {
+  const loaded = await loadBulk(postIds);
+  if (!loaded) return fail("not_found");
+  const { rows, member, profileId } = loaded;
+  await db.transaction(async (tx) => {
+    await tx.delete(posts).where(
+      inArray(
+        posts.id,
+        rows.map((r) => r.id),
+      ),
+    );
+    for (const r of rows) {
+      await logActivity(tx, {
+        profileId,
+        actor: `user:${member.user.id}`,
+        event: "post.deleted",
+        payload: { postId: r.id, caption: r.caption?.slice(0, 80) ?? null },
+      });
+    }
+  });
+  revalidatePath(`/perfis/${profileId}`);
   return OK;
 }

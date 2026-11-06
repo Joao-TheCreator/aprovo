@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, MoreHorizontal, RefreshCw } from "lucide-react";
+import { CheckSquare, Eye, MoreHorizontal, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -61,6 +61,8 @@ export function FeedToolbar({
   hasHidden,
   showHidden,
   onShowHiddenChange,
+  selecting,
+  onSelectingChange,
 }: {
   profileId: string;
   ratio: GridRatio;
@@ -71,6 +73,8 @@ export function FeedToolbar({
   hasHidden: boolean;
   showHidden: boolean;
   onShowHiddenChange: (v: boolean) => void;
+  selecting: boolean;
+  onSelectingChange: (v: boolean) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -147,6 +151,12 @@ export function FeedToolbar({
       <Chip pressed={clientMode} onClick={() => onClientModeChange(!clientMode)}>
         Modo cliente
       </Chip>
+      {!clientMode ? (
+        <Chip pressed={selecting} onClick={() => onSelectingChange(!selecting)}>
+          <CheckSquare aria-hidden className="size-4" />
+          Selecionar
+        </Chip>
+      ) : null}
       {hasHidden && !clientMode ? (
         <Chip pressed={showHidden} onClick={() => onShowHiddenChange(!showHidden)}>
           <Eye aria-hidden className="size-4" />

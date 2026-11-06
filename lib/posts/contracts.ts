@@ -81,4 +81,5 @@ export const POST_ERROR_MESSAGES: Record<string, string> = {
   invalid_media_count: "Um post tem de 1 a 10 mídias; um vídeo tem exatamente 1.",
   not_found: "Publicação não encontrada.",
   forbidden: "Você não tem acesso a esta publicação.",
+  stale_order: "A grade mudou. Atualize a página e tente de novo.",
 };
