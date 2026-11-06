@@ -37,6 +37,19 @@ export function signKey(key: string, exp: number): string {
   return createHmac("sha256", secret()).update(`${key}\n${exp}`).digest("base64url");
 }
 
+/** Signature for uploads: HMAC over `PUT\n<key>\n<exp>` (distinct from GET signatures). */
+export function signPutKey(key: string, exp: number): string {
+  return createHmac("sha256", secret()).update(`PUT\n${key}\n${exp}`).digest("base64url");
+}
+
+export function verifyPutSignature(key: string, exp: string | null, sig: string | null): boolean {
+  if (!exp || !sig || !/^\d+$/.test(exp)) return false;
+  if (Number(exp) < Math.floor(Date.now() / 1000)) return false;
+  const expected = Buffer.from(signPutKey(key, Number(exp)));
+  const given = Buffer.from(sig);
+  return expected.length === given.length && timingSafeEqual(expected, given);
+}
+
 /** Verifies a signed local URL's query params. */
 export function verifySignature(key: string, exp: string | null, sig: string | null): boolean {
   if (!exp || !sig || !/^\d+$/.test(exp)) return false;
@@ -91,6 +104,50 @@ export class LocalStorage implements Storage {
     const file = this.resolve(key);
     await fs.rm(file, { force: true });
     await fs.rm(`${file}.meta.json`, { force: true });
+  }
+
+  /** Absolute path for a key (used by the PUT route to stream to disk). */
+  resolvePath(key: string): string {
+    return this.resolve(key);
+  }
+
+  async writeMeta(key: string, contentType: string): Promise<void> {
+    await fs.writeFile(`${this.resolve(key)}.meta.json`, JSON.stringify({ contentType }));
+  }
+
+  async headObject(key: string): Promise<{ size: number; contentType: string } | null> {
+    const file = this.resolve(key);
+    let size: number;
+    try {
+      size = (await fs.stat(file)).size;
+    } catch {
+      return null;
+    }
+    let contentType = EXT_TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream";
+    try {
+      const meta = JSON.parse(await fs.readFile(`${file}.meta.json`, "utf8")) as {
+        contentType?: string;
+      };
+      if (meta.contentType) contentType = meta.contentType;
+    } catch {
+      // sidecar optional
+    }
+    return { size, contentType };
+  }
+
+  async getSignedUploadUrl(
+    key: string,
+    contentType: string,
+    ttlSeconds = 900,
+  ): Promise<{ url: string; headers: Record<string, string> }> {
+    assertSafeKey(key);
+    const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
+    const base = (process.env.APP_URL || "").replace(/\/$/, "");
+    const encoded = key.split("/").map(encodeURIComponent).join("/");
+    return {
+      url: `${base}/api/files/${encoded}?exp=${exp}&sig=${signPutKey(key, exp)}&op=put`,
+      headers: { "Content-Type": contentType },
+    };
   }
 
   async getSignedUrl(key: string, ttlSeconds = 3600): Promise<string> {

@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -58,5 +59,31 @@ export class S3Storage implements Storage {
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
       expiresIn: ttlSeconds,
     });
+  }
+
+  async getSignedUploadUrl(
+    key: string,
+    contentType: string,
+    ttlSeconds = 900,
+  ): Promise<{ url: string; headers: Record<string, string> }> {
+    const url = await getSignedUrl(
+      this.client,
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType }),
+      { expiresIn: ttlSeconds },
+    );
+    return { url, headers: { "Content-Type": contentType } };
+  }
+
+  async headObject(key: string): Promise<{ size: number; contentType: string } | null> {
+    try {
+      const res = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return {
+        size: res.ContentLength ?? 0,
+        contentType: res.ContentType ?? "application/octet-stream",
+      };
+    } catch (e) {
+      if (e instanceof Error && (e.name === "NotFound" || e.name === "NoSuchKey")) return null;
+      throw e;
+    }
   }
 }

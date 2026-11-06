@@ -6,6 +6,14 @@ export interface Storage {
   getObject(key: string): Promise<{ body: Buffer; contentType: string } | null>;
   deleteObject(key: string): Promise<void>;
   getSignedUrl(key: string, ttlSeconds?: number): Promise<string>;
+  /** URL + headers the client must use to PUT the raw file directly into storage. */
+  getSignedUploadUrl(
+    key: string,
+    contentType: string,
+    ttlSeconds?: number,
+  ): Promise<{ url: string; headers: Record<string, string> }>;
+  /** Size and content type of a stored object, or null when it does not exist. */
+  headObject(key: string): Promise<{ size: number; contentType: string } | null>;
 }
 
 export type StoragePrefix = "originals" | "previews" | "thumbs" | "ig-cache";
