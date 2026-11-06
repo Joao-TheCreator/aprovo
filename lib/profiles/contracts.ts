@@ -66,7 +66,16 @@ export type FeedItem =
       position: number;
       caption: string | null;
       scheduledFor: Date | null;
+      /** Phase 2: "post" (photo/carousel) or "video". */
+      postKind: "post" | "video";
+      /** Phase 2: crop of the first media inside the grid cell (fractions), null = center. */
+      gridCrop: GridCrop | null;
+      /** Phase 2: number of media items (badge for carousel). */
+      mediaCount: number;
     };
+
+/** Fractions of the source image: x,y = top-left, w,h = size. Aspect of w/h follows the grid ratio. */
+export type GridCrop = { x: number; y: number; w: number; h: number };
 
 export type ProfileFeed = {
   profile: {

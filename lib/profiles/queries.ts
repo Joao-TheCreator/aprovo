@@ -8,7 +8,7 @@ import { importedPosts, mediaAssets, postMedia, posts, profiles } from "@/db/sch
 import { getCurrentWorkspace, requireUser, requireWorkspaceMember } from "@/lib/auth/require";
 import { isGraphConfigured } from "@/lib/instagram";
 import { getStorage } from "@/lib/storage";
-import type { FeedItem, PostStatus, ProfileFeed, ProfileListItem } from "./contracts";
+import type { FeedItem, PostStatus, ProfileFeed, ProfileListItem, GridCrop } from "./contracts";
 
 const URL_TTL = 3600;
 
@@ -108,6 +108,7 @@ export async function getProfileFeed(profileId: string): Promise<ProfileFeed | n
           sortOrder: postMedia.sortOrder,
           kind: mediaAssets.kind,
           thumbPath: mediaAssets.thumbPath,
+          gridCrop: postMedia.gridCrop,
         })
         .from(postMedia)
         .innerJoin(mediaAssets, eq(mediaAssets.id, postMedia.assetId))
@@ -119,11 +120,20 @@ export async function getProfileFeed(profileId: string): Promise<ProfileFeed | n
         )
         .orderBy(asc(postMedia.sortOrder))
     : [];
-  const firstByPost = new Map<string, { thumbPath: string | null; count: number; kind: string }>();
+  const firstByPost = new Map<
+    string,
+    { thumbPath: string | null; count: number; kind: string; gridCrop: GridCrop | null }
+  >();
   for (const m of firstMedia) {
     const cur = firstByPost.get(m.postId);
     if (cur) cur.count++;
-    else firstByPost.set(m.postId, { thumbPath: m.thumbPath, count: 1, kind: m.kind });
+    else
+      firstByPost.set(m.postId, {
+        thumbPath: m.thumbPath,
+        count: 1,
+        kind: m.kind,
+        gridCrop: m.gridCrop ?? null,
+      });
   }
 
   const imported = await db
@@ -154,6 +164,9 @@ export async function getProfileFeed(profileId: string): Promise<ProfileFeed | n
         position: x.position,
         caption: x.caption,
         scheduledFor: x.scheduledFor,
+        postKind: x.kind,
+        gridCrop: m?.gridCrop ?? null,
+        mediaCount: m?.count ?? 0,
       };
     }),
     ...imported.map(({ post }, i): FeedItem => ({
