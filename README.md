@@ -4,8 +4,9 @@
 Instagram dos clientes, organizarem as próximas publicações e colherem a aprovação por um link,
 sem o cliente precisar de conta.
 
-Estado: **Fases 0 e 1 concluídas** (fundação; conectar perfil, importação manual e feed simulado). A importação
-automática pela Graph API está implementada e testada com fixtures, aguardando a conta ponte da Meta. Próxima: Fase 2, publicações.
+Estado: **Fases 0, 1 e 2 concluídas** (fundação; perfil e feed; publicações com upload, enquadramento, detalhe e
+edição) mais a **conexão OAuth com o Instagram** em Configurações. A integração real com a Meta aguarda o app
+(docs/10). Próximas: Fase 3 (organização da grade) e Fase 4 (aprovação).
 
 ## Documentos
 

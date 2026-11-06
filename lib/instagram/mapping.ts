@@ -80,15 +80,21 @@ export function mapMedia(m: RawMedia): IgMedia {
   };
 }
 
-export function mapMediaPage(bd: BusinessDiscoveryResponse["business_discovery"]): IgMediaPage {
+export function mapMediaPage(
+  bd: Pick<BusinessDiscoveryResponse["business_discovery"], "media">,
+): IgMediaPage {
   return {
     media: (bd.media?.data ?? []).map(mapMedia),
     nextCursor: bd.media?.paging?.cursors?.after ?? null,
   };
 }
 
-export function mapProfile(bd: BusinessDiscoveryResponse["business_discovery"]): IgProfile {
-  const page = mapMediaPage(bd);
+export function mapProfile(
+  bd: Omit<BusinessDiscoveryResponse["business_discovery"], "media"> &
+    Partial<Pick<BusinessDiscoveryResponse["business_discovery"], "media">>,
+  precomputed?: IgMediaPage,
+): IgProfile {
+  const page = precomputed ?? mapMediaPage(bd);
   return {
     username: bd.username.toLowerCase(),
     displayName: bd.name || null,
@@ -101,4 +107,29 @@ export function mapProfile(bd: BusinessDiscoveryResponse["business_discovery"]):
     media: page.media,
     nextCursor: page.nextCursor,
   };
+}
+
+/** `/me` (Instagram Login) has no business_discovery wrapper. */
+export const meProfileSchema = z.object({
+  username: z.string(),
+  name: z.string().optional(),
+  biography: z.string().optional(),
+  website: z.string().optional(),
+  profile_picture_url: z.string().optional(),
+  followers_count: z.number().optional(),
+  follows_count: z.number().optional(),
+  media_count: z.number().optional(),
+});
+
+export const meMediaSchema = z.object({
+  data: z.array(media),
+  paging: z.object({ cursors: z.object({ after: z.string().optional() }).optional() }).optional(),
+});
+
+export function mapMeMediaPage(r: z.infer<typeof meMediaSchema>): IgMediaPage {
+  return { media: r.data.map(mapMedia), nextCursor: r.paging?.cursors?.after ?? null };
+}
+
+export function mapMeProfile(p: z.infer<typeof meProfileSchema>, page: IgMediaPage): IgProfile {
+  return mapProfile({ ...p, media: undefined }, page);
 }

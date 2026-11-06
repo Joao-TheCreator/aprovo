@@ -1,0 +1,44 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { getCurrentWorkspace, requireUser } from "@/lib/auth/require";
+import {
+  OAuthError,
+  STATE_COOKIE,
+  completeOAuth,
+  isOAuthConfigured,
+  statesMatch,
+} from "@/lib/instagram/oauth";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
+  const user = await requireUser();
+  const back = (q: string) => {
+    const res = NextResponse.redirect(new URL(`/configuracoes?${q}`, req.url));
+    res.cookies.delete(STATE_COOKIE);
+    return res;
+  };
+  const params = req.nextUrl.searchParams;
+
+  if (params.get("error") || params.get("error_reason")) return back("error=denied");
+  if (!isOAuthConfigured()) return back("error=not_configured");
+  if (!statesMatch(req.cookies.get(STATE_COOKIE)?.value, params.get("state"))) {
+    return back("error=state_mismatch");
+  }
+  // Instagram appends "#_" to the code; it is not part of it.
+  const code = params.get("code")?.replace(/#_$/, "");
+  if (!code) return back("error=exchange_failed");
+
+  const ws = await getCurrentWorkspace(user.id!);
+  if (!ws) return back("error=exchange_failed");
+
+  try {
+    await completeOAuth({ code, workspaceId: ws.id, userId: user.id! });
+  } catch (e) {
+    console.error(
+      "[instagram] oauth callback failed:",
+      e instanceof OAuthError ? e.message : e instanceof Error ? e.name : "unknown",
+    );
+    return back("error=exchange_failed");
+  }
+  return back("connected=1");
+}

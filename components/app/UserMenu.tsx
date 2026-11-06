@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut, Settings } from "lucide-react";
+import Link from "next/link";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -49,9 +50,11 @@ export function UserMenu({ user, showName = false }: { user?: ShellUser; showNam
           ) : null}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
-          <Settings strokeWidth={1.75} />
-          Configurações
+        <DropdownMenuItem asChild>
+          <Link href="/configuracoes">
+            <Settings strokeWidth={1.75} />
+            Configurações
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           {/* Full navigation to an API route, not a page: plain anchor is intended. */}

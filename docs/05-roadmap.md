@@ -36,6 +36,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [x] Cópia de avatar/miniaturas para o bucket `ig-cache`
 - [x] Cache 24 h, botão "Atualizar feed", tratamento de erros amigável
 - [x] Testes unitários do mapeamento de resposta → `imported_posts`
+- [x] Conexão OAuth (Instagram Login) por workspace em Configurações › Instagram, token criptografado, refresh semanal por cron, caminho `/me/media` para a própria conta
 
 ### E2 · Perfil e feed simulado (3 d) · concluído em 06/11/2026
 - [x] Tela 01 (formulário, estados, confirmação)
@@ -43,21 +44,21 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [x] Lista de perfis e navegação (barra inferior / sidebar)
 - [x] Proporção da grade configurável (1:1 / 3:4)
 
-### E3 · Mídia (5 d)
-- [ ] Upload direto com URL pré-assinada (multipart S3 para vídeo), progresso, retry, limites (30 MB imagem, 300 MB e 90 s vídeo)
-- [ ] Route Handler de processamento com `sharp` (thumb 320 c/ crop, preview 1080, HEIC)
-- [ ] Captura de capa de vídeo no navegador + escolha de frame
-- [ ] Editor de enquadramento da miniatura (`grid_crop`) com pinça/arrastar
-- [ ] Status do asset e dedup por sha256
-- [ ] Testes: pipeline de imagem com fixtures
+### E3 · Mídia (5 d) · concluído em 06/11/2026
+- [x] Upload direto com URL pré-assinada (PUT único com retry; multipart fica para depois), progresso, retry, limites (30 MB imagem, 300 MB e 90 s vídeo)
+- [x] Route Handler de processamento com `sharp` (thumb 320 c/ crop, preview 1080, HEIC)
+- [x] Captura de capa de vídeo no navegador + escolha de frame
+- [x] Editor de enquadramento da miniatura (`grid_crop`) com arrastar + slider de zoom (pinça fica para depois)
+- [x] Status do asset e dedup por sha256
+- [x] Testes: pipeline de imagem com fixtures
 
-### E4 · Publicações (5 d)
-- [ ] Folha "Adicionar" (Post / Vídeo) e seletor de mídias com tira reordenável
-- [ ] CRUD de `posts` + `post_media` (Server Actions + Zod)
-- [ ] Tela 05: legenda, hashtags em chips, data prevista, observações, mini prévia
-- [ ] Tela 04: detalhe ampliado (carrossel com swipe, player de vídeo)
-- [ ] Ações: salvar rascunho, arquivar, excluir, ocultar importado
-- [ ] `activity_log` básico (post.created, post.updated, post.sent)
+### E4 · Publicações (5 d) · concluído em 06/11/2026
+- [x] Folha "Adicionar" (Post / Vídeo) e seletor de mídias com tira reordenável
+- [x] CRUD de `posts` + `post_media` (Server Actions + Zod)
+- [x] Tela 05: legenda, hashtags em chips, data prevista, observações, mini prévia
+- [x] Tela 04: detalhe ampliado (carrossel com swipe, player de vídeo)
+- [x] Ações: salvar rascunho, arquivar, excluir, ocultar importado
+- [x] `activity_log` básico (post.created, post.updated, post.sent)
 
 ### E5 · Organização do feed (4 d)
 - [ ] dnd-kit na grade (toque com pressão longa, autoscroll), ordem otimista + desfazer

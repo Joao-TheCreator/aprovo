@@ -55,7 +55,7 @@ function safeFilename(name: string): string {
 
 export async function requestUpload(input: RequestUploadInput): Promise<RequestUploadResult> {
   const parsed = requestUploadSchema.safeParse(input);
-  if (!parsed.success) return err("invalid_type");
+  if (!parsed.success) return err("invalid_input");
   const { profileId, filename, size, kind } = parsed.data;
   let contentType = parsed.data.contentType.toLowerCase();
 

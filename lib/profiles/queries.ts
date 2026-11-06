@@ -6,7 +6,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { importedPosts, mediaAssets, postMedia, posts, profiles } from "@/db/schema";
 import { getCurrentWorkspace, requireUser, requireWorkspaceMember } from "@/lib/auth/require";
-import { isGraphConfigured } from "@/lib/instagram";
+import { isGraphConfiguredForWorkspace } from "@/lib/instagram";
 import { getStorage } from "@/lib/storage";
 import type { FeedItem, PostStatus, ProfileFeed, ProfileListItem, GridCrop } from "./contracts";
 
@@ -201,7 +201,7 @@ export async function getProfileFeed(profileId: string): Promise<ProfileFeed | n
       gridRatio: p.gridRatio,
     },
     items,
-    canRefresh: isGraphConfigured(),
+    canRefresh: await isGraphConfiguredForWorkspace(p.workspaceId),
   };
 }
 

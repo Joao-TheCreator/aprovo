@@ -76,4 +76,5 @@ export const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
   too_long: "Vídeo longo demais. O limite é 90 segundos.",
   processing_failed: "Não conseguimos processar este arquivo. Tente outro.",
   not_found: "Arquivo não encontrado.",
+  invalid_input: "Dados do upload inválidos. Recarregue a página e tente de novo.",
 };
