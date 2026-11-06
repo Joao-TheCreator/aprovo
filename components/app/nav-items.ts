@@ -7,6 +7,15 @@ export type NavItem = {
   match: (p: string) => boolean;
 };
 
+/** The "Feed" item links to the last opened profile (cookie `aprovo_last_profile`) when known. */
+export function getNavItems(lastProfileId?: string | null): NavItem[] {
+  return NAV_ITEMS.map((item) =>
+    item.label === "Feed" && lastProfileId
+      ? { ...item, href: `/perfis/${encodeURIComponent(lastProfileId)}` }
+      : item,
+  );
+}
+
 export const NAV_ITEMS: NavItem[] = [
   {
     label: "Perfis",
@@ -14,7 +23,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Users,
     match: (p) => p === "/perfis" || p === "/perfis/novo",
   },
-  // TODO: point to /perfis/[current] once the current profile is known (Phase 1).
   {
     label: "Feed",
     href: "/perfis",

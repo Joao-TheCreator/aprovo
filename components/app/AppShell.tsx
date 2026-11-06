@@ -4,12 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Logo } from "@/components/app/Logo";
-import { NAV_ITEMS } from "@/components/app/nav-items";
+import { getNavItems, NAV_ITEMS } from "@/components/app/nav-items";
 import { UserMenu, type ShellUser } from "@/components/app/UserMenu";
 import { cn } from "@/lib/utils";
 
-export function AppShell({ user, children }: { user?: ShellUser; children: React.ReactNode }) {
+export function AppShell({
+  user,
+  lastProfileId,
+  children,
+}: {
+  user?: ShellUser;
+  lastProfileId?: string | null;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
+  const navItems = getNavItems(lastProfileId);
   const activeHref = NAV_ITEMS.find((item) => item.match(pathname))?.label;
 
   return (
@@ -20,7 +29,7 @@ export function AppShell({ user, children }: { user?: ShellUser; children: React
           <Logo height={32} />
         </Link>
         <nav aria-label="Principal" className="flex flex-col gap-1">
-          {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
+          {navItems.map(({ label, href, icon: Icon }) => {
             const active = label === activeHref;
             return (
               <Link
@@ -63,7 +72,7 @@ export function AppShell({ user, children }: { user?: ShellUser; children: React
           aria-label="Principal"
           className="border-border bg-card fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t pb-[env(safe-area-inset-bottom)] md:hidden"
         >
-          {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
+          {navItems.map(({ label, href, icon: Icon }) => {
             const active = label === activeHref;
             return (
               <Link
