@@ -10,6 +10,8 @@ const PUBLIC = [
   /^\/entrar(\/|$)/,
   /^\/verificar(\/|$)/,
   /^\/a\//,
+  /^\/api\/approval\//, // public decision endpoint (token-authenticated)
+  /^\/legal(\/|$)/, // privacy, terms, data deletion
   /^\/api\/auth(\/|$)/,
   /^\/api\/files\//, // local storage driver (signed URLs)
   /^\/manifest\.webmanifest$/,
