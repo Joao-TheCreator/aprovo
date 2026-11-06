@@ -11,6 +11,7 @@ const PUBLIC = [
   /^\/verificar(\/|$)/,
   /^\/a\//,
   /^\/api\/auth(\/|$)/,
+  /^\/api\/files\//, // local storage driver (signed URLs)
   /^\/manifest\.webmanifest$/,
   /^\/icons\//,
   /^\/brand\//,

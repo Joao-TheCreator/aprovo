@@ -27,3 +27,6 @@ test-results/
 npm-debug.log*
 pnpm-debug.log*
 .vercel
+
+# local storage driver
+.data/
