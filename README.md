@@ -34,7 +34,7 @@ Este repositório está na fase de **planejamento**. O código começa na Fase 0
 Fora desta etapa: calendário completo, publicar/agendar no Instagram, stories.
 
 **Tecnologia**
-Next.js 15 + TypeScript + Tailwind + shadcn/ui + dnd-kit · Postgres (Neon) + Drizzle · Auth.js ·
+Next.js 16 + TypeScript + Tailwind + shadcn/ui + dnd-kit · Postgres (Neon) + Drizzle · Auth.js ·
 Cloudflare R2 (S3) · SSE · sharp · Meta Graph API (Business Discovery) · Vercel Hobby · Resend ·
 Sentry · PWA. Engine própria e portável; tudo em tier gratuito no piloto (R$ 0).
 

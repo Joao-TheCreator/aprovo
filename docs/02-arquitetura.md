@@ -9,10 +9,10 @@ ADR-002).
 
 | Camada | Escolha | Por quê |
 |---|---|---|
-| Framework web | **Next.js 15 (App Router) + TypeScript** | SSR para o link público de aprovação (abre rápido, com preview no WhatsApp), Server Actions para mutações, PWA simples |
+| Framework web | **Next.js 16 (App Router) + TypeScript** | SSR para o link público de aprovação (abre rápido, com preview no WhatsApp), Server Actions para mutações, PWA simples |
 | UI | **Tailwind CSS + shadcn/ui + Radix** | Mobile-first, componentes acessíveis, fácil aplicar o design system do APROVO |
 | Ícones | **Lucide** (traço fino arredondado) | Bate com o briefing ("ícones de traço fino arredondado") |
-| Fonte | **Poppins** via `next/font` | Identidade visual |
+| Fonte | **Poppins** self-hosted via `@fontsource/poppins` | Identidade visual sem depender do Google Fonts em runtime |
 | Drag & drop | **dnd-kit** | Funciona com toque, leve, acessível |
 | Banco | **Postgres** gerenciado gratuito (**Neon** free, 0,5 GB; alternativa: Supabase free usado só como Postgres) | Padrão aberto; muda de provedor trocando a `DATABASE_URL` |
 | ORM / migrations | **Drizzle ORM** + `drizzle-kit` | Tipagem forte, migrations SQL versionadas no repo |
@@ -164,7 +164,7 @@ Sentry free (5.000 erros/mês), Google Fonts. O primeiro custo aparece ao cobrar
 | `APP_URL` | Montar links de aprovação |
 | `SENTRY_DSN` | Erros |
 
-Ambientes: `local` (Postgres em Docker ou branch do Neon), `preview` (Vercel por PR + branch de
+Ambientes: `local` (Postgres 16 instalado na máquina ou branch do Neon), `preview` (Vercel por PR + branch de
 staging no Neon + bucket `aprovo-media-staging`), `production`.
 
 ## 7. Performance e limites

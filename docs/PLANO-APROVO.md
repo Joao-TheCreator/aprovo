@@ -15,7 +15,7 @@ O **APROVO** é um web app mobile-first para social medias montarem o feed do In
 |---|---|
 | Produto (MVP) | Login do social media; conectar perfil público pelo `@`; feed simulado como no Instagram; adicionar Post (foto/carrossel) e Vídeo da galeria preservando os originais; reorganizar a grade por arrastar e soltar com status por publicação; editar legenda, hashtags e data prevista; link de aprovação sem conta com registro de data, hora e link; retorno em tempo real |
 | Fora desta etapa | Calendário completo, publicar/agendar no Instagram, stories e destaques |
-| Tecnologia | Next.js 15 + TypeScript + Tailwind + shadcn/ui + dnd-kit; Postgres (Neon) + Drizzle; Auth.js; Cloudflare R2 (S3); SSE; sharp; Meta Graph API (Business Discovery); Vercel Hobby; Resend; Sentry; PWA. Engine própria e portável, tudo em tier gratuito (R$ 0 no piloto) |
+| Tecnologia | Next.js 16 + TypeScript + Tailwind + shadcn/ui + dnd-kit; Postgres (Neon) + Drizzle; Auth.js; Cloudflare R2 (S3); SSE; sharp; Meta Graph API (Business Discovery); Vercel Hobby; Resend; Sentry; PWA. Engine própria e portável, tudo em tier gratuito (R$ 0 no piloto) |
 | Dados do Instagram | Business Discovery com uma conta ponte profissional carrega qualquer conta business/creator pública só pelo `@`. Contas pessoais caem em importação manual; scraping só atrás de flag |
 | Prazo | 38 dias úteis (≈ 8 semanas) com 1 dev; ≈ 6 semanas com 2 |
 | Providências externas | Conta ponte do Instagram (perfil do João convertido em Criador de conteúdo); app na Meta criado depois com Claude Cowork; contas gratuitas em Vercel, Neon e R2; sem domínio por enquanto; logo do briefing já extraído; documentos legais rascunhados para revisão de advogado(a) |

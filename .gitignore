@@ -1,7 +1,29 @@
+# dependencies
 node_modules/
+.pnp
+.pnp.*
+
+# next.js
 .next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files (keep the example)
 .env
 .env.*
 !.env.example
+
+# testing
+coverage/
+playwright-report/
+test-results/
+
+# misc
 .DS_Store
+*.pem
 *.log
+npm-debug.log*
+pnpm-debug.log*
+.vercel
