@@ -17,15 +17,16 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 
 ## Épicos e tarefas
 
-### E0 · Fundação (3 d)
-- [ ] `create-next-app` com TypeScript, App Router, Tailwind, ESLint, Prettier
-- [ ] shadcn/ui + tokens do design system (`docs/09-design-system.md`), Poppins, Lucide
-- [ ] Postgres gratuito (Neon) com branch de staging, Drizzle + drizzle-kit, primeira migration (users/auth, workspaces, members, profiles)
-- [ ] Auth.js (e-mail mágico via Resend + Google), middleware de proteção de rotas, criação do workspace
-- [ ] Bucket R2 `aprovo-media` com chave de API e CORS para upload direto
-- [ ] Logo do briefing (`assets/brand/aprovo-logo.png`) no header e no manifest
-- [ ] CI no GitHub Actions: lint, typecheck, vitest; deploy preview na Vercel
-- [ ] Sentry (`SENTRY_DSN`), variáveis de ambiente documentadas em `.env.example`
+### E0 · Fundação (3 d) · concluído em 06/11/2026
+- [x] `create-next-app` com TypeScript, App Router, Tailwind, ESLint, Prettier
+- [x] shadcn/ui + tokens do design system (`docs/09-design-system.md`), Poppins, Lucide
+- [x] Postgres gratuito (Neon) com branch de staging, Drizzle + drizzle-kit, primeira migration (users/auth, workspaces, members, profiles)
+- [x] Auth.js (e-mail mágico via Resend + Google), middleware de proteção de rotas, criação do workspace
+- [x] Bucket R2 `aprovo-media` com chave de API e CORS para upload direto
+- [x] Logo do briefing (`assets/brand/aprovo-logo.png`) no header e no manifest
+- [x] CI no GitHub Actions: lint, typecheck, vitest, build
+- [ ] Deploy preview na Vercel (adiado: contas ainda não criadas)
+- [x] Sentry (`SENTRY_DSN`), variáveis de ambiente documentadas em `.env.example`
 
 ### E1 · Integração Instagram (5 d)
 - [ ] Interface `InstagramProvider` (`fetchProfile`, `fetchMedia`)

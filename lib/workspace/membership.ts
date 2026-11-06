@@ -18,6 +18,10 @@ export async function getMemberRole(
   return row?.role ?? null;
 }
 
-export async function isMember(db: Database, workspaceId: string, userId: string): Promise<boolean> {
+export async function isMember(
+  db: Database,
+  workspaceId: string,
+  userId: string,
+): Promise<boolean> {
   return (await getMemberRole(db, workspaceId, userId)) !== null;
 }

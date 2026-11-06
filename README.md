@@ -4,7 +4,7 @@
 Instagram dos clientes, organizarem as próximas publicações e colherem a aprovação por um link,
 sem o cliente precisar de conta.
 
-Este repositório está na fase de **planejamento**. O código começa na Fase 0 do roadmap.
+Estado: **Fase 0 concluída** (scaffold, design system, banco, autenticação, CI). Próxima: Fase 1, perfil e feed.
 
 ## Documentos
 
@@ -43,6 +43,33 @@ Conta ponte do Instagram (perfil do João convertido em Criador de conteúdo); a
 Developers (depois, com Claude Cowork); contas gratuitas em Vercel, Neon e Cloudflare R2; sem
 domínio por enquanto; logo do briefing em `assets/brand/`; documentos legais rascunhados em
 `docs/legal/` para revisão de advogado(a).
+
+## Desenvolvimento local
+
+Requisitos: Node 22, pnpm 10 e um Postgres 16 (local ou Neon).
+
+```bash
+cp .env.example .env.local   # preencha DATABASE_URL, AUTH_SECRET e, se tiver, RESEND_API_KEY
+```
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm db:migrate
+```
+
+```bash
+pnpm dev
+```
+
+Scripts úteis: `pnpm check` (lint + typecheck + testes), `pnpm db:generate` (nova migration a
+partir de `db/schema`), `pnpm db:studio`, `pnpm icons:generate` (ícones do PWA a partir do logo).
+Os testes usam `DATABASE_URL_TEST` e truncam as tabelas entre casos.
+
+Sem `RESEND_API_KEY`, o link mágico não é enviado; para testar a área logada em desenvolvimento,
+insira uma linha em `users` e outra em `sessions` e use o cookie `authjs.session-token`.
 
 ## Como trabalhar neste repositório com Claude Code
 

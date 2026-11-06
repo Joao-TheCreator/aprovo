@@ -10,13 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { citext, id, timestamps } from "./columns";
-import {
-  accountType,
-  gridRatio,
-  importSource,
-  importStatus,
-  importedMediaType,
-} from "./enums";
+import { accountType, gridRatio, importSource, importStatus, importedMediaType } from "./enums";
 import { mediaAssets } from "./media";
 import { workspaces } from "./workspaces";
 

@@ -21,6 +21,13 @@ function init(): Database {
   return createDb(url, { max: 1 }).db;
 }
 
+/** The real Drizzle instance. Use where a library inspects the object (e.g. the Auth.js adapter). */
+export function getDb(): Database {
+  globalForDb.__aprovoDb ??= init();
+  return globalForDb.__aprovoDb;
+}
+
+/** Lazy proxy: importing never throws; the first query initializes the connection. */
 export const db: Database = new Proxy({} as Database, {
   get(_t, prop, receiver) {
     globalForDb.__aprovoDb ??= init();

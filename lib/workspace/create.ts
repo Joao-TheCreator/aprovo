@@ -1,7 +1,10 @@
 import type { Database } from "@/db/client";
 import { workspaceMembers, workspaces } from "@/db/schema";
 
-export function defaultWorkspaceName(user: { name?: string | null; email?: string | null }): string {
+export function defaultWorkspaceName(user: {
+  name?: string | null;
+  email?: string | null;
+}): string {
   const name = user.name?.trim();
   if (name) return name;
   const local = user.email?.split("@")[0]?.trim();

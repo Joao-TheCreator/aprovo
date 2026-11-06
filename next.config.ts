@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Cache Components stay off in the MVP: the app is authenticated and dynamic, and the
+  // Suspense-everywhere requirement would slow the first phases. Revisit at launch.
+  cacheComponents: false,
   turbopack: {
     rules: {
       "*.css": {

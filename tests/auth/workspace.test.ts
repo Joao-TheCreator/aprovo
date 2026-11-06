@@ -11,7 +11,10 @@ describe("workspace", () => {
     const ws = await createWorkspaceForUser(db, u);
     expect(ws.name).toBe("maria");
     expect(ws.ownerId).toBe(u.id);
-    const members = await db.select().from(workspaceMembers).where(eq(workspaceMembers.userId, u.id));
+    const members = await db
+      .select()
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.userId, u.id));
     expect(members).toHaveLength(1);
     expect(members[0].role).toBe("owner");
   });

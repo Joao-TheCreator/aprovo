@@ -1,13 +1,13 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import NextAuth from "next-auth";
-import { db } from "@/db/client";
+import { db, getDb } from "@/db/client";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
 import { createWorkspaceForUser } from "@/lib/workspace/create";
 import { authConfig } from "./config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  adapter: DrizzleAdapter(db, {
+  adapter: DrizzleAdapter(getDb(), {
     usersTable: users,
     accountsTable: accounts,
     sessionsTable: sessions,

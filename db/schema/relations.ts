@@ -31,7 +31,10 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   assets: many(mediaAssets),
 }));
 export const workspaceMembersRelations = relations(workspaceMembers, ({ one }) => ({
-  workspace: one(workspaces, { fields: [workspaceMembers.workspaceId], references: [workspaces.id] }),
+  workspace: one(workspaces, {
+    fields: [workspaceMembers.workspaceId],
+    references: [workspaces.id],
+  }),
   user: one(users, { fields: [workspaceMembers.userId], references: [users.id] }),
 }));
 
@@ -75,15 +78,24 @@ export const approvalRequestsRelations = relations(approvalRequests, ({ one, man
   decisions: many(approvalDecisions),
 }));
 export const approvalItemsRelations = relations(approvalItems, ({ one }) => ({
-  request: one(approvalRequests, { fields: [approvalItems.requestId], references: [approvalRequests.id] }),
+  request: one(approvalRequests, {
+    fields: [approvalItems.requestId],
+    references: [approvalRequests.id],
+  }),
   post: one(posts, { fields: [approvalItems.postId], references: [posts.id] }),
 }));
 export const approvalLinksRelations = relations(approvalLinks, ({ one, many }) => ({
-  request: one(approvalRequests, { fields: [approvalLinks.requestId], references: [approvalRequests.id] }),
+  request: one(approvalRequests, {
+    fields: [approvalLinks.requestId],
+    references: [approvalRequests.id],
+  }),
   decisions: many(approvalDecisions),
 }));
 export const approvalDecisionsRelations = relations(approvalDecisions, ({ one }) => ({
-  request: one(approvalRequests, { fields: [approvalDecisions.requestId], references: [approvalRequests.id] }),
+  request: one(approvalRequests, {
+    fields: [approvalDecisions.requestId],
+    references: [approvalRequests.id],
+  }),
   post: one(posts, { fields: [approvalDecisions.postId], references: [posts.id] }),
   link: one(approvalLinks, { fields: [approvalDecisions.linkId], references: [approvalLinks.id] }),
 }));
