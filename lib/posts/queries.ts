@@ -1,6 +1,6 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { mediaAssets, postMedia, posts, profiles } from "@/db/schema";
+import { approvalDecisions, mediaAssets, postMedia, posts, profiles } from "@/db/schema";
 import { requireWorkspaceMember } from "@/lib/auth/require";
 import { assetUrls } from "@/lib/media/urls";
 import { getStorage } from "@/lib/storage";
@@ -53,6 +53,19 @@ export async function getPost(postId: string): Promise<PostDetail | null> {
     }
   }
 
+  let lastClientComment: string | null = null;
+  if (post.status === "changes_requested") {
+    const [d] = await db
+      .select({ comment: approvalDecisions.comment })
+      .from(approvalDecisions)
+      .where(
+        and(eq(approvalDecisions.postId, postId), eq(approvalDecisions.decision, "changes_requested")),
+      )
+      .orderBy(desc(approvalDecisions.decidedAt))
+      .limit(1);
+    lastClientComment = d?.comment ?? null;
+  }
+
   return {
     id: post.id,
     profileId: post.profileId,
@@ -73,6 +86,6 @@ export async function getPost(postId: string): Promise<PostDetail | null> {
       avatarUrl,
       gridRatio: profile.gridRatio,
     },
-    lastClientComment: null,
+    lastClientComment,
   };
 }

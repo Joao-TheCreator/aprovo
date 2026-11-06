@@ -1,14 +1,15 @@
-import { EmptyState } from "@/components/app/EmptyState";
 import { PhoneFrame } from "@/components/app/PhoneFrame";
+import { ApprovalList } from "@/components/approvals/ApprovalList";
+import { listApprovalRequests } from "@/lib/approvals/queries";
 
-export default function AprovacoesPage() {
+export const metadata = { title: "Aprovações" };
+
+export default async function AprovacoesPage() {
+  const requests = await listApprovalRequests();
   return (
     <PhoneFrame className="flex flex-col gap-6">
       <h1 className="text-2xl leading-8 font-bold">Aprovações</h1>
-      <EmptyState
-        title="Nenhum envio ainda"
-        description="Quando você enviar publicações para o cliente aprovar, elas aparecem aqui."
-      />
+      <ApprovalList requests={requests} showProfile feedHref="/perfis" />
     </PhoneFrame>
   );
 }
