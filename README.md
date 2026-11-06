@@ -4,7 +4,8 @@
 Instagram dos clientes, organizarem as próximas publicações e colherem a aprovação por um link,
 sem o cliente precisar de conta.
 
-Estado: **Fase 0 concluída** (scaffold, design system, banco, autenticação, CI). Próxima: Fase 1, perfil e feed.
+Estado: **Fases 0 e 1 concluídas** (fundação; conectar perfil, importação manual e feed simulado). A importação
+automática pela Graph API está implementada e testada com fixtures, aguardando a conta ponte da Meta. Próxima: Fase 2, publicações.
 
 ## Documentos
 

@@ -28,20 +28,20 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [ ] Deploy preview na Vercel (adiado: contas ainda não criadas)
 - [x] Sentry (`SENTRY_DSN`), variáveis de ambiente documentadas em `.env.example`
 
-### E1 · Integração Instagram (5 d)
-- [ ] Interface `InstagramProvider` (`fetchProfile`, `fetchMedia`)
-- [ ] Implementação Graph API Business Discovery com token da conta ponte (perfil do João convertido em Criador de conteúdo)
-- [ ] Implementação fallback (provedor de scraping) atrás de feature flag
-- [ ] Importação manual (upload de imagens + formulário)
-- [ ] Cópia de avatar/miniaturas para o bucket `ig-cache`
-- [ ] Cache 24 h, botão "Atualizar feed", tratamento de erros amigável
-- [ ] Testes unitários do mapeamento de resposta → `imported_posts`
+### E1 · Integração Instagram (5 d) · concluído em 06/11/2026 (Graph API sem teste real: aguarda conta ponte)
+- [x] Interface `InstagramProvider` (`fetchProfile`, `fetchMedia`)
+- [x] Implementação Graph API Business Discovery com token da conta ponte (perfil do João convertido em Criador de conteúdo)
+- [x] Fallback (provedor de scraping) atrás de feature flag: só o placeholder, sem scraping real
+- [x] Importação manual (upload de imagens + formulário)
+- [x] Cópia de avatar/miniaturas para o bucket `ig-cache`
+- [x] Cache 24 h, botão "Atualizar feed", tratamento de erros amigável
+- [x] Testes unitários do mapeamento de resposta → `imported_posts`
 
-### E2 · Perfil e feed simulado (3 d)
-- [ ] Tela 01 (formulário, estados, confirmação)
-- [ ] Componentes `ProfileHeader`, `ProfileTabs`, `FeedGrid`, `GridCell` (badges carrossel/vídeo)
-- [ ] Lista de perfis e navegação (barra inferior / sidebar)
-- [ ] Proporção da grade configurável (1:1 / 3:4)
+### E2 · Perfil e feed simulado (3 d) · concluído em 06/11/2026
+- [x] Tela 01 (formulário, estados, confirmação)
+- [x] Componentes `ProfileHeader`, `ProfileTabs`, `FeedGrid`, `GridCell` (badges carrossel/vídeo)
+- [x] Lista de perfis e navegação (barra inferior / sidebar)
+- [x] Proporção da grade configurável (1:1 / 3:4)
 
 ### E3 · Mídia (5 d)
 - [ ] Upload direto com URL pré-assinada (multipart S3 para vídeo), progresso, retry, limites (30 MB imagem, 300 MB e 90 s vídeo)

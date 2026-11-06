@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   CircleCheck,
   Clapperboard,
   Grid3x3,
@@ -21,14 +22,17 @@ export function InstagramHeader({ profile }: { profile: ProfileFeed["profile"] }
   ];
   return (
     <>
-      <div className="flex h-12 items-center justify-between px-4">
-        <span className="text-xl font-bold">@{profile.igUsername} ▾</span>
-        <div aria-hidden className="flex items-center gap-4">
-          <Share className="size-6" strokeWidth={1.75} />
-          <CircleCheck className="size-6" strokeWidth={1.75} />
-          <History className="size-6" strokeWidth={1.75} />
-          <SquarePlus className="size-6" strokeWidth={1.75} />
-          <Menu className="size-6" strokeWidth={1.75} />
+      <div className="flex h-12 items-center justify-between gap-3 px-4">
+        <span className="flex min-w-0 items-center gap-1 text-lg font-bold">
+          <span className="truncate">{profile.igUsername}</span>
+          <ChevronDown className="size-4 shrink-0" strokeWidth={2.5} aria-hidden />
+        </span>
+        <div aria-hidden className="flex shrink-0 items-center gap-3">
+          <Share className="size-5" strokeWidth={1.75} />
+          <CircleCheck className="size-5" strokeWidth={1.75} />
+          <History className="size-5" strokeWidth={1.75} />
+          <SquarePlus className="size-5" strokeWidth={1.75} />
+          <Menu className="size-5" strokeWidth={1.75} />
         </div>
       </div>
 
