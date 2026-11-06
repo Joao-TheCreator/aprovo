@@ -4,9 +4,9 @@
 Instagram dos clientes, organizarem as próximas publicações e colherem a aprovação por um link,
 sem o cliente precisar de conta.
 
-Estado: **Fases 0, 1 e 2 concluídas** (fundação; perfil e feed; publicações com upload, enquadramento, detalhe e
-edição) mais a **conexão OAuth com o Instagram** em Configurações. A integração real com a Meta aguarda o app
-(docs/10). Próximas: Fase 3 (organização da grade) e Fase 4 (aprovação).
+Estado: **MVP completo em código** (Fases 0 a 4 e a maior parte da 5): perfil e feed, publicações, organização da grade,
+links de aprovação com página pública e tempo real, conexão OAuth com o Instagram, páginas legais, exclusão e
+exportação de conta. Falta: deploy na Vercel, app na Meta, revisão jurídica e piloto (ver `docs/10-deploy-e-meta.md`).
 
 ## Documentos
 

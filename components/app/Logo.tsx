@@ -10,7 +10,7 @@ export function Logo({ className, height = 28 }: { className?: string; height?: 
       width={Math.round((height * 794) / 346)}
       height={height}
       priority
-      className={cn("w-auto", className)}
+      className={cn("w-auto self-start", className)}
       style={{ height }}
     />
   );

@@ -60,32 +60,32 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [x] Ações: salvar rascunho, arquivar, excluir, ocultar importado
 - [x] `activity_log` básico (post.created, post.updated, post.sent)
 
-### E5 · Organização do feed (4 d)
-- [ ] dnd-kit na grade (toque com pressão longa, autoscroll), ordem otimista + desfazer
-- [ ] `reorderPosts` em transação
-- [ ] Pílulas de status, filtros, "Modo cliente", multi-seleção
-- [ ] Alternativa acessível (mover para cima/baixo)
+### E5 · Organização do feed (4 d) · concluído em 06/11/2026
+- [x] dnd-kit na grade (toque com pressão longa, autoscroll), ordem otimista + desfazer
+- [x] `reorderPosts` em transação
+- [x] Pílulas de status, filtros, "Modo cliente", multi-seleção
+- [x] Alternativa acessível (mover para cima/baixo)
 
-### E6 · Aprovação (6 d)
-- [ ] Tabelas `approval_*`, transação `decideApproval` com `NOTIFY`, Route Handler `/api/approval/[token]/decide`, rate limit (10 decisões/min por IP e por token)
-- [ ] Folha "Compartilhar link": escopo, título, recado, geração do token, copiar/WhatsApp/share
-- [ ] Página pública `/a/[token]` SSR com Open Graph, feed destacado, detalhe, decisões
-- [ ] `ApprovalBar`: nome do aprovador, comentário obrigatório em ajustes, "Aprovar todos"
-- [ ] Páginas de link expirado/revogado; revogar e regenerar link
-- [ ] Testes e2e Playwright: enviar → abrir link → aprovar → status atualizado
+### E6 · Aprovação (6 d) · concluído em 06/11/2026
+- [x] Tabelas `approval_*`, transação `decideApproval` com `NOTIFY`, Route Handler `/api/approval/[token]/decide`, rate limit (10 decisões/min por IP e por token)
+- [x] Folha "Compartilhar link": escopo, título, recado, geração do token, copiar/WhatsApp/share
+- [x] Página pública `/a/[token]` SSR com Open Graph, feed destacado, detalhe, decisões
+- [x] `ApprovalBar`: nome do aprovador, comentário obrigatório em ajustes, "Aprovar todos"
+- [x] Páginas de link expirado/revogado; revogar e regenerar link
+- [x] Fluxo enviar → abrir link → aprovar → status atualizado validado com Playwright (script ainda fora do repo; suíte e2e automatizada fica para o lançamento)
 
-### E7 · Retorno em tempo real e histórico (2 d)
-- [ ] SSE `/api/events` com `LISTEN/NOTIFY` do Postgres (fallback polling 5 s), toasts, invalidação do TanStack Query
-- [ ] Tela "Aprovações": envios, links, aberturas, decisões (data, hora, link, comentário)
-- [ ] Eventos de aprovação no `activity_log` e exibição no detalhe da publicação
+### E7 · Retorno em tempo real e histórico (2 d) · concluído em 06/11/2026
+- [x] SSE `/api/events` com `LISTEN/NOTIFY` do Postgres (fallback polling 5 s), toasts, invalidação do TanStack Query
+- [x] Tela "Aprovações": envios, links, aberturas, decisões (data, hora, link, comentário)
+- [x] Eventos de aprovação no `activity_log` e exibição no detalhe da publicação
 
-### E8 · Lançamento (5 d)
-- [ ] PWA: manifest, ícones, splash, `display: standalone`, atualização de versão
-- [ ] Configurações da conta: "Excluir conta" (exigido pela política de privacidade e pela Meta) e exportação simples dos dados
-- [ ] E-mails Resend: link mágico customizado, "cliente decidiu"
+### E8 · Lançamento (5 d) · parcial em 06/11/2026
+- [x] PWA: manifest, ícones, splash, `display: standalone`, atualização de versão
+- [x] Configurações da conta: "Excluir conta" (exigido pela política de privacidade e pela Meta) e exportação simples dos dados
+- [x] E-mails Resend: link mágico customizado, "cliente decidiu"
 - [ ] QA em iOS Safari, Android Chrome, desktop; performance (LCP da página pública)
 - [ ] Revisar com advogado(a) e publicar Política de Privacidade, Termos de Uso e Instruções de exclusão de dados (rascunhos em `docs/legal/`); cadastrar as URLs no app da Meta
-- [ ] Piloto com 3 perfis reais da CPCann; ajustes
+- [ ] Piloto com 3 perfis reais; ajustes
 - [ ] Produção: subdomínio `vercel.app` (domínio próprio depois), backup do Postgres, revisão dos limites gratuitos; ao cobrar clientes, sair do Vercel Hobby
 
 ## Marcos de demonstração

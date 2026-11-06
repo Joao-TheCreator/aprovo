@@ -77,10 +77,7 @@ export function PublicApprovalView({ token, data }: Props) {
       comment: string,
     ): Promise<boolean> => {
       setBusyId(postId);
-      setErrors((cur) => {
-        const { [postId]: _drop, ...rest } = cur;
-        return rest;
-      });
+      setErrors((cur) => Object.fromEntries(Object.entries(cur).filter(([k]) => k !== postId)));
       try {
         const body: DecideInput = {
           postId,
