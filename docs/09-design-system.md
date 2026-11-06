@@ -69,6 +69,7 @@ verde do logo sobre roxo principal.
 
 ## Assets necessários
 
-- Logo APROVO em SVG (horizontal e símbolo).
+- Logo: raster extraído do briefing em `assets/brand/aprovo-logo.png` (794×346, fundo
+  transparente). Vetor SVG e símbolo isolado ficam pendentes.
 - Ícones PWA 192/512 px e máscara (maskable), splash iOS.
 - Imagem Open Graph padrão para links de aprovação (1200×630).

@@ -11,7 +11,7 @@ Este repositório está na fase de **planejamento**. O código começa na Fase 0
 | Doc | Conteúdo |
 |---|---|
 | [01 · Visão e escopo](docs/01-visao-e-escopo.md) | Problema, produto, usuários, o que entra e o que fica de fora do MVP, métricas, perguntas em aberto |
-| [02 · Arquitetura](docs/02-arquitetura.md) | Stack (Next.js + Supabase), módulos, fluxos técnicos, segurança, ambientes |
+| [02 · Arquitetura](docs/02-arquitetura.md) | Stack (Next.js + Postgres + Auth.js + R2), módulos, fluxos técnicos, segurança, ambientes |
 | [03 · Modelo de dados](docs/03-modelo-de-dados.md) | Tabelas, máquina de estados da publicação, RLS, buckets |
 | [04 · Telas e fluxos](docs/04-telas-e-fluxos.md) | Rotas, cada tela do briefing com elementos, estados, regras e critérios de aceite |
 | [05 · Roadmap](docs/05-roadmap.md) | Fases, épicos, tarefas, estimativas (≈ 8 semanas, 1 dev) e marcos |
@@ -19,6 +19,7 @@ Este repositório está na fase de **planejamento**. O código começa na Fase 0
 | [07 · API do Instagram](docs/07-instagram-api.md) | Como carregar o feed pelo @ (Business Discovery), fallbacks, publicação futura |
 | [08 · Decisões e riscos](docs/08-decisoes-e-riscos.md) | ADRs, riscos com mitigação, dependências externas a providenciar |
 | [09 · Design system](docs/09-design-system.md) | Cores, tipografia, status, componentes |
+| [Legal](docs/legal/README.md) | Rascunhos de Política de Privacidade, Termos de Uso e Instruções de exclusão de dados (LGPD + exigências da Meta) |
 
 ## Resumo do que precisamos
 
@@ -33,12 +34,15 @@ Este repositório está na fase de **planejamento**. O código começa na Fase 0
 Fora desta etapa: calendário completo, publicar/agendar no Instagram, stories.
 
 **Tecnologia**
-Next.js 15 + TypeScript + Tailwind + shadcn/ui + dnd-kit · Supabase (Postgres, Auth, Storage,
-Realtime) · sharp · Meta Graph API (Business Discovery) · Vercel · Resend · Sentry · PWA.
+Next.js 15 + TypeScript + Tailwind + shadcn/ui + dnd-kit · Postgres (Neon) + Drizzle · Auth.js ·
+Cloudflare R2 (S3) · SSE · sharp · Meta Graph API (Business Discovery) · Vercel Hobby · Resend ·
+Sentry · PWA. Engine própria e portável; tudo em tier gratuito no piloto (R$ 0).
 
 **Providências externas**
-Conta profissional do Instagram do APROVO ligada a uma Página do Facebook; app na Meta for
-Developers; projetos Supabase e Vercel; domínio; logo em SVG; política de privacidade.
+Conta ponte do Instagram (perfil do João convertido em Criador de conteúdo); app na Meta for
+Developers (depois, com Claude Cowork); contas gratuitas em Vercel, Neon e Cloudflare R2; sem
+domínio por enquanto; logo do briefing em `assets/brand/`; documentos legais rascunhados em
+`docs/legal/` para revisão de advogado(a).
 
 ## Como trabalhar neste repositório com Claude Code
 

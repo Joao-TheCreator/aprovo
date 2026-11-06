@@ -1,64 +1,108 @@
 # 08 · Decisões de arquitetura (ADRs) e riscos
 
+Decisões revisadas com o João em 06/11/2026. Cada ADR traz a decisão, o que o João definiu e
+as consequências.
+
 ## Decisões
 
-### ADR-001 · Web app PWA em vez de app nativo
+### ADR-001 · Web app PWA primeiro; APK como plano B
 **Contexto:** briefing pede mobile-first e aprovação sem conta; equipe pequena.
-**Decisão:** Next.js + PWA. **Consequências:** sem loja de apps, link universal funciona; galeria
-e vídeo via `<input type="file">` (sem acesso contínuo à biblioteca de fotos). Reavaliar Expo se
-o piloto mostrar limitação.
+**Decisão do João:** web app é o caminho mais fácil; se der problema, empacotar como APK para
+distribuição direta até publicar na Play Store.
+**Como fazemos:** Next.js como PWA instalável. O mesmo código pode ser empacotado como APK com
+Capacitor (WebView + plugins nativos de galeria/arquivos) ou Trusted Web Activity (abre o PWA
+dentro de um app Android). O gatilho para o APK é uma limitação concreta do PWA no piloto:
+galeria, vídeo grande, notificações ou instalação no iOS.
+**Consequências:** sem loja de apps no início; link universal funciona em qualquer celular; a
+arquitetura não muda se o APK for necessário.
 
-### ADR-002 · Supabase como backend único
-**Contexto:** precisamos de auth, Postgres, storage e tempo real rapidamente.
-**Decisão:** Supabase com RLS. **Consequências:** lock-in moderado (Postgres padrão mitiga);
-Realtime resolve a Tela 07 sem WebSocket próprio.
+### ADR-002 · Engine própria e portável, em tiers gratuitos
+**Contexto:** a proposta inicial usava Supabase (Auth + Storage + Realtime + Postgres) só por
+custo e velocidade.
+**Decisão do João:** não ficar refém do Supabase; o objetivo é custo baixo (grátis).
+**Como fazemos:** cada peça em padrão aberto, hoje gratuita, trocável por configuração:
+- Banco: Postgres padrão no **Neon free** (0,5 GB) via Drizzle; migrations no repo.
+- Autenticação: **Auth.js** dentro do app (link mágico por e-mail via Resend + Google); sessões
+  no Postgres.
+- Mídia: **Cloudflare R2** pela API S3 (10 GB grátis, sem taxa de saída); qualquer S3 serve.
+- Tempo real: **SSE** em Route Handler com `LISTEN/NOTIFY` do Postgres; fallback polling.
+- Hospedagem: **Vercel Hobby** (grátis) em subdomínio `vercel.app`, sem domínio próprio por
+  enquanto. O Hobby proíbe uso comercial: ao cobrar clientes, migrar para Pro (US$ 20/mês) ou
+  Cloudflare Workers (grátis mesmo comercial).
+**Custo do piloto: R$ 0.**
+**Consequências:** um pouco mais de código próprio (auth, SSE, upload S3) em troca de zero
+lock-in; RLS do Supabase sai e a autorização fica na aplicação (`requireWorkspaceMember`).
 
-### ADR-003 · Business Discovery como fonte principal do feed importado
-**Contexto:** Basic Display API foi descontinuada; o briefing pede "só o @, contas públicas".
-**Decisão:** usar a Graph API com o token da conta profissional do próprio APROVO; cobre contas
-business/creator públicas sem o cliente fazer login. Fallback por provedor de scraping atrás de
-flag, e importação manual sempre disponível. **Consequências:** contas pessoais não importam
-automaticamente; dependência de um app Meta configurado. Detalhes em `docs/07-instagram-api.md`.
+### ADR-003 · Business Discovery como fonte do feed importado
+**Contexto:** Basic Display API acabou; o briefing pede "só o @, contas públicas".
+**Decisão do João:** ok; refinar conforme o MVP/piloto mostrar.
+**Como fazemos:** Graph API com token de uma conta ponte profissional (ver dependências);
+importação manual sempre disponível; provedor de scraping atrás de flag, desligado.
+**Consequências:** contas pessoais não importam automaticamente; medir no piloto quantos
+clientes são profissionais antes de decidir sobre o fallback pago.
 
 ### ADR-004 · Originais imutáveis, derivados gerados no servidor
-**Decisão:** o arquivo enviado nunca é alterado; miniatura e prévia são derivadas por `sharp`.
-**Consequências:** custo de storage maior; garante o requisito "preservar a qualidade".
+**Contexto:** briefing exige preservar a qualidade dos arquivos e gerar prévias adequadas.
+**Pergunta do João:** como seria melhor isso?
+**Como fazemos:**
+1. O arquivo escolhido na galeria sobe **direto para o R2, sem recompressão** no navegador
+   (upload pré-assinado; vídeo em multipart). Aceitamos HEIC do iPhone e convertemos no servidor,
+   guardando o HEIC original.
+2. O servidor gera os **derivados** com `sharp`: miniatura de 320 px já com o corte da grade e
+   prévia de 1080 px em WebP; para vídeo, capa (frame escolhido) nos mesmos tamanhos.
+3. A interface **só usa derivados** (grade, detalhe, página do cliente). O original só sai do
+   bucket em "Baixar original" e, no futuro, na publicação no Instagram.
+4. **Dedup** por SHA-256: a mesma foto enviada duas vezes ocupa espaço uma vez.
+5. **Custo:** R2 dá 10 GB grátis; 1 GB ≈ 250 fotos de 4 MB ou ≈ 10 vídeos de 100 MB. Acima,
+   US$ 0,015 por GB/mês, sem cobrança de download.
+6. **Retenção:** originais podem ser expurgados X dias após a publicação aprovada (configurável,
+   com aviso na interface), mantendo os derivados para o histórico. Decidir o X no piloto.
+**Alternativa descartada:** comprimir no navegador antes do upload. Economiza storage, mas perde
+qualidade e contraria o briefing.
+**Consequências:** storage é o único custo que cresce com o uso; limites de 30 MB por imagem e
+300 MB / 90 s por vídeo seguram o pior caso.
 
-### ADR-005 · Link de aprovação com token aleatório hasheado
-**Decisão:** token de 256 bits, guardado como hash, expiração de 30 dias, revogável, e decisão
-registrada com link, data/hora, IP e user agent. **Consequências:** sem senha, sem conta, mas
-quem tem o link decide; o social media escolhe com quem compartilha.
+### ADR-005 · Link de aprovação aberto, com token aleatório hasheado
+**Decisão do João:** mantida.
+**Como fazemos:** token de 256 bits, guardado como hash, expira em 30 dias, revogável; a decisão
+registra link, data/hora, IP, user agent, nome opcional e comentário.
+**Consequências:** sem senha, sem conta; quem tem o link decide. PIN opcional fica para o
+futuro se o piloto pedir.
 
 ### ADR-006 · Decisão por publicação, não só por conjunto
-**Decisão:** cada item do envio recebe sua própria decisão; o conjunto deriva o status.
-**Consequências:** mais granular para o cliente; UI precisa de "Aprovar todos".
+**Decisão do João:** ok.
+**Consequências:** o conjunto deriva o status; UI tem "Aprovar todos".
 
 ### ADR-007 · Planejados ficam no topo da grade
-**Decisão:** publicações planejadas ocupam as primeiras posições; reordenação só entre elas.
-**Consequências:** fiel ao Instagram (novo em cima); ancoragem entre importados fica para depois.
+**Decisão do João:** sem objeção.
+**Consequências:** fiel ao Instagram (novo em cima); ancoragem entre importados fica para
+etapa futura.
 
 ## Riscos
 
 | # | Risco | Prob. | Impacto | Mitigação |
 |---|---|---|---|---|
-| R1 | Business Discovery não cobre contas pessoais ou muda de regra | Alta | Alto | Fallback por provedor + importação manual; UI explica a limitação; cache local de tudo importado |
-| R2 | Provedor de scraping instável ou com risco de ToS | Média | Médio | Atrás de feature flag; nunca único caminho; limitar a uso sob demanda |
-| R3 | Upload de vídeo grande falha em 4G | Média | Médio | Upload direto resumível (TUS do Supabase), limite 300 MB, retry |
+| R1 | Business Discovery não cobre contas pessoais ou muda de regra | Alta | Alto | Importação manual; UI explica a limitação; cache local de tudo importado; fallback atrás de flag |
+| R2 | Provedor de scraping instável ou com risco de ToS | Média | Médio | Atrás de feature flag; nunca único caminho; só com decisão do João |
+| R3 | Upload de vídeo grande falha em 4G | Média | Médio | Multipart S3 com retry por parte, limite 300 MB |
 | R4 | HEIC/iOS gera erros de processamento | Média | Baixo | `sharp` com libheif; fallback de conversão no navegador |
 | R5 | Grade divergente do Instagram (mudança de proporção 1:1 → 3:4) | Alta | Baixo | Proporção configurável por perfil (`profiles.grid_ratio`) |
 | R6 | Link vaza e terceiro aprova | Baixa | Médio | Expiração, revogação, nome do aprovador, IP/UA registrados, opção futura de PIN |
-| R7 | Custo de storage com originais de vídeo | Média | Médio | Política de expurgo de originais após X dias da aprovação (etapa futura) |
-| R8 | PWA no iOS sem notificações confiáveis | Alta | Baixo | Realtime enquanto aberto + e-mail; push fica para depois |
+| R7 | Custo de storage com originais de vídeo | Média | Médio | 10 GB grátis no R2; política de expurgo de originais (ADR-004) |
+| R8 | PWA no iOS sem notificações confiáveis | Alta | Baixo | SSE enquanto aberto + e-mail; push fica para depois; APK como plano B (ADR-001) |
 | R9 | Escopo cresce para calendário/publicação | Média | Alto | Briefing adia explicitamente; roadmap separa etapas |
+| R10 | Vercel Hobby não permite uso comercial | Certa ao cobrar | Médio | Migrar para Pro ou Cloudflare Workers antes de cobrar; app não depende de recursos exclusivos da Vercel |
+| R11 | Conta ponte pessoal não gera token na Graph API | Alta | Alto | Converter o perfil do João em Criador de conteúdo (gratuito, reversível) ou usar outra conta profissional |
+| R12 | Limites gratuitos (Neon 0,5 GB, R2 10 GB) estourarem no piloto | Baixa | Baixo | Monitorar uso; metadados são pequenos; mídia é o único volume |
 
-## Dependências externas a providenciar
+## Dependências externas (decisões do João)
 
-| Item | Responsável | Quando |
-|---|---|---|
-| Conta profissional do Instagram do APROVO/CPCann ligada a uma Página do Facebook | João | antes da fase 1 |
-| App na Meta for Developers (modo dev) com produto Instagram e token de longa duração | João + dev | fase 1 |
-| Projeto Supabase (staging e produção) | dev | fase 0 |
-| Conta Vercel e domínio (ex.: aprovo.app ou aprovo.cpcann.com) | João | fase 0 |
-| Resend com domínio verificado | dev | fase 5 |
-| Política de privacidade e termos publicados (exigência da Meta) | João | fase 5 |
-| Logo em SVG e ícones do PWA | design | fase 0 |
+| # | Item | Decisão | Responsável | Quando |
+|---|---|---|---|---|
+| 1 | Conta ponte do Instagram | Não usar a da CPCann. João envia a página pessoal dele para testar; se não funcionar (conta pessoal não gera token), converte em Criador de conteúdo ou envia outra profissional | João | antes da fase 1 |
+| 2 | App na Meta for Developers | Criar depois, com Claude Cowork | João + Claude | fase 1 |
+| 3 | Banco, storage e hospedagem | Onde for melhor, de preferência grátis: Neon, Cloudflare R2, Vercel Hobby | dev | fase 0 |
+| 4 | Domínio | Sem domínio por enquanto; subdomínio `vercel.app` | — | depois |
+| 5 | Resend com domínio verificado | Ok; sem domínio próprio, usar o domínio de teste do Resend no piloto | dev | fase 5 |
+| 6 | Política de privacidade, termos e exclusão de dados | Rascunhados pelo Claude em `docs/legal/`; revisão de advogado(a) antes de publicar | Claude + João | fase 5 |
+| 7 | Logo | Usar a do briefing: extraída para `assets/brand/aprovo-logo.png`; vetor fica pendente | — | feito |

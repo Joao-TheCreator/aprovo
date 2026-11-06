@@ -99,5 +99,5 @@ Respostas mudam detalhes, não a direção. Enquanto não vierem, seguimos com a
 | "Ajustes solicitados" exige comentário obrigatório? | Sim, mínimo 1 caractere |
 | Quantos perfis por social media no MVP? | Ilimitado, sem cobrança |
 | Vídeo: só o arquivo + capa, ou também corte de duração? | Só arquivo + capa (primeiro frame ou frame escolhido) |
-| Precisa de login por Google ou basta e-mail com link mágico? | Ambos; Google via Supabase Auth custa pouco |
+| Precisa de login por Google ou basta e-mail com link mágico? | Ambos; Auth.js cobre os dois |
 | O link de aprovação expira? | Sim, 30 dias, renovável pelo social media |

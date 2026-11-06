@@ -1,10 +1,11 @@
 # 03 · Modelo de dados
 
-Postgres (Supabase). Todas as tabelas têm `id uuid default gen_random_uuid()`, `created_at` e
-`updated_at`, exceto as tabelas de ligação (`workspace_members`, `approval_items`), que usam
-chave composta. RLS filtra por `workspace_id`: direto onde a coluna existe (`profiles`,
-`media_assets`) e por junção `… → profile → workspace_id` nas demais (`posts`, `imported_posts`,
-`approval_*`, `activity_log`), via função `is_workspace_member(profile_id)`.
+Postgres padrão (hoje no Neon free; portável). Todas as tabelas têm `id uuid default
+gen_random_uuid()`, `created_at` e `updated_at`, exceto as tabelas de ligação
+(`workspace_members`, `approval_items`), que usam chave composta. A autorização é feita na
+aplicação: toda consulta filtra por `workspace_id`, direto onde a coluna existe (`profiles`,
+`media_assets`) e por junção `… → profile → workspace_id` nas demais (`posts`,
+`imported_posts`, `approval_*`, `activity_log`), pelo helper `requireWorkspaceMember`.
 
 ## 1. Diagrama
 
@@ -29,13 +30,17 @@ workspaces ──< workspace_members >── auth.users
 | Coluna | Tipo | Notas |
 |---|---|---|
 | name | text | "Agência X" ou nome do freelancer |
-| owner_id | uuid → auth.users | |
+| owner_id | uuid → users | |
+
+### `users`, `accounts`, `sessions`, `verification_tokens` (Auth.js)
+Tabelas padrão do adaptador Drizzle do Auth.js: usuário (e-mail, nome, avatar), contas OAuth
+(Google), sessões e tokens do link mágico.
 
 ### `workspace_members`
 | Coluna | Tipo | Notas |
 |---|---|---|
 | workspace_id | uuid → workspaces | |
-| user_id | uuid → auth.users | |
+| user_id | uuid → users | |
 | role | enum `owner, editor` | `viewer` fica para depois |
 | PK | (workspace_id, user_id) | |
 
@@ -87,7 +92,7 @@ workspaces ──< workspace_members >── auth.users
 | scheduled_for | timestamptz | "data prevista" (calendário fica para depois) |
 | notes | text | observações internas, não vão para o cliente |
 | archived_at | timestamptz | "Arquivar": some da grade sem apagar; reversível |
-| created_by | uuid → auth.users | |
+| created_by | uuid → users | |
 | sent_for_approval_at, approved_at | timestamptz | |
 
 ### `post_media` (mídias de uma publicação, ordenadas)
@@ -192,21 +197,25 @@ Regras:
 - `approval_decisions (post_id, decided_at desc)` para pegar a última decisão.
 - `media_assets (workspace_id, sha256)` para dedup.
 
-## 5. Políticas RLS (resumo)
+## 5. Autorização (resumo)
 
-| Tabela | select | insert/update/delete |
+| Tabela | leitura | escrita |
 |---|---|---|
-| workspaces, profiles, posts, post_media, media_assets, imported_posts, activity_log, approval_requests, approval_items, approval_links | membro do workspace | membro com role `owner` ou `editor` |
-| approval_decisions | membro do workspace | **nenhum** (nem membro, nem anon); só a função `decide_approval(token, …)` com `security definer`, chamada pelo Route Handler `/api/approval/[token]/decide`, insere |
-| Página pública `/a/[token]` | usa `service_role` no servidor, lendo apenas o que o request contém | — |
+| workspaces, profiles, posts, post_media, media_assets, imported_posts, activity_log, approval_requests, approval_items, approval_links | membro do workspace (`requireWorkspaceMember`) | membro com role `owner` ou `editor` |
+| approval_decisions | membro do workspace | **só** a transação `decideApproval(token, …)` do servidor, chamada pelo Route Handler `/api/approval/[token]/decide`; nunca editada ou apagada |
+| Página pública `/a/[token]` | servidor lê apenas o que o request do token contém | — |
 
-## 6. Storage (buckets)
+RLS no Postgres pode ser ligado depois como segunda camada; o modelo não depende disso.
 
-| Bucket | Público? | Conteúdo |
-|---|---|---|
-| `originals` | não | arquivos enviados, intactos |
-| `previews` | não | 1080 px |
-| `thumbs` | não | 320 px, já com o corte da grade |
-| `ig-cache` | não | avatar e miniaturas importadas do Instagram |
+## 6. Storage (R2, API S3)
 
-Caminho: `<workspace_id>/<asset_id>/<nome>`. Acesso só por URL assinada.
+Um bucket privado `aprovo-media` com quatro prefixos:
+
+| Prefixo | Conteúdo |
+|---|---|
+| `originals/` | arquivos enviados, intactos |
+| `previews/` | 1080 px |
+| `thumbs/` | 320 px, já com o corte da grade |
+| `ig-cache/` | avatar e miniaturas importadas do Instagram |
+
+Chave: `<prefixo>/<workspace_id>/<asset_id>/<nome>`. Acesso só por URL pré-assinada.

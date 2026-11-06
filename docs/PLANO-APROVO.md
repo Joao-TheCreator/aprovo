@@ -1,7 +1,7 @@
 ---
 title: "APROVO · Plano da primeira etapa"
 subtitle: "Planeje. Aprove. Publique."
-date: "6 de novembro de 2026"
+date: "6 de novembro de 2026 (rev. 2)"
 lang: pt-BR
 ---
 
@@ -15,13 +15,14 @@ O **APROVO** é um web app mobile-first para social medias montarem o feed do In
 |---|---|
 | Produto (MVP) | Login do social media; conectar perfil público pelo `@`; feed simulado como no Instagram; adicionar Post (foto/carrossel) e Vídeo da galeria preservando os originais; reorganizar a grade por arrastar e soltar com status por publicação; editar legenda, hashtags e data prevista; link de aprovação sem conta com registro de data, hora e link; retorno em tempo real |
 | Fora desta etapa | Calendário completo, publicar/agendar no Instagram, stories e destaques |
-| Tecnologia | Next.js 15 + TypeScript + Tailwind + shadcn/ui + dnd-kit; Supabase (Postgres, Auth, Storage, Realtime); sharp; Meta Graph API (Business Discovery); Vercel; Resend; Sentry; PWA |
-| Dados do Instagram | Business Discovery com uma conta profissional do próprio APROVO carrega qualquer conta business/creator pública só pelo `@`. Contas pessoais caem em importação manual; scraping só atrás de flag |
+| Tecnologia | Next.js 15 + TypeScript + Tailwind + shadcn/ui + dnd-kit; Postgres (Neon) + Drizzle; Auth.js; Cloudflare R2 (S3); SSE; sharp; Meta Graph API (Business Discovery); Vercel Hobby; Resend; Sentry; PWA. Engine própria e portável, tudo em tier gratuito (R$ 0 no piloto) |
+| Dados do Instagram | Business Discovery com uma conta ponte profissional carrega qualquer conta business/creator pública só pelo `@`. Contas pessoais caem em importação manual; scraping só atrás de flag |
 | Prazo | 38 dias úteis (≈ 8 semanas) com 1 dev; ≈ 6 semanas com 2 |
-| Providências externas | Conta profissional do Instagram do APROVO ligada a uma Página do Facebook; app na Meta for Developers; projetos Supabase e Vercel; domínio; logo em SVG; política de privacidade |
+| Providências externas | Conta ponte do Instagram (perfil do João convertido em Criador de conteúdo); app na Meta criado depois com Claude Cowork; contas gratuitas em Vercel, Neon e R2; sem domínio por enquanto; logo do briefing já extraído; documentos legais rascunhados para revisão de advogado(a) |
+| Plano B | Se o PWA limitar, empacotar como APK (Capacitor/TWA) até publicar na Play Store |
 | Referência de uso | App My Feed · Grid Preview & Planner (as capturas do briefing são dele) |
 
-Os capítulos a seguir são os documentos `docs/01` a `docs/09` do repositório, na ordem.
+Os capítulos a seguir são os documentos `docs/01` a `docs/09` e `docs/legal` do repositório, na ordem.
 
 # 01 · Visão e escopo do APROVO
 
@@ -124,18 +125,18 @@ Respostas mudam detalhes, não a direção. Enquanto não vierem, seguimos com a
 | "Ajustes solicitados" exige comentário obrigatório? | Sim, mínimo 1 caractere |
 | Quantos perfis por social media no MVP? | Ilimitado, sem cobrança |
 | Vídeo: só o arquivo + capa, ou também corte de duração? | Só arquivo + capa (primeiro frame ou frame escolhido) |
-| Precisa de login por Google ou basta e-mail com link mágico? | Ambos; Google via Supabase Auth custa pouco |
+| Precisa de login por Google ou basta e-mail com link mágico? | Ambos; Auth.js cobre os dois |
 | O link de aprovação expira? | Sim, 30 dias, renovável pelo social media |
 
-
-\newpage
 
 # 02 · Arquitetura técnica
 
 ## 1. Decisão de stack
 
-O MVP é um único app Next.js com Supabase atrás. A escolha privilegia **velocidade de entrega**,
-**tempo real pronto** (status de aprovação) e **custo baixo** no início.
+O MVP é um único app Next.js com uma **engine própria e portável** atrás: Postgres padrão,
+storage compatível com S3 e autenticação na aplicação. Nada fica preso a um fornecedor; cada
+peça roda hoje em **tier gratuito** e pode ser trocada sem reescrever o app (decisão do João,
+ADR-002).
 
 | Camada | Escolha | Por quê |
 |---|---|---|
@@ -144,21 +145,29 @@ O MVP é um único app Next.js com Supabase atrás. A escolha privilegia **veloc
 | Ícones | **Lucide** (traço fino arredondado) | Bate com o briefing ("ícones de traço fino arredondado") |
 | Fonte | **Poppins** via `next/font` | Identidade visual |
 | Drag & drop | **dnd-kit** | Funciona com toque, leve, acessível |
-| Banco + Auth + Storage + Realtime | **Supabase (Postgres)** | Um fornecedor cobre login (e-mail mágico + Google), arquivos com URLs assinadas, Realtime para status, RLS para isolar clientes |
-| ORM / migrations | **Drizzle ORM** + `supabase db` para migrations SQL | Tipagem forte e SQL explícito para RLS e índices |
+| Banco | **Postgres** gerenciado gratuito (**Neon** free, 0,5 GB; alternativa: Supabase free usado só como Postgres) | Padrão aberto; muda de provedor trocando a `DATABASE_URL` |
+| ORM / migrations | **Drizzle ORM** + `drizzle-kit` | Tipagem forte, migrations SQL versionadas no repo |
+| Autenticação | **Auth.js** (next-auth v5): e-mail com link mágico via Resend + Google | Roda dentro do app; sessões no Postgres; sem serviço externo de auth |
+| Storage de mídia | **Cloudflare R2** (API S3; 10 GB e 10 milhões de leituras/mês grátis; sem taxa de saída) via `@aws-sdk/client-s3` | Qualquer S3 (AWS, MinIO, Backblaze) serve no lugar |
+| Tempo real | **SSE** (Server-Sent Events) em Route Handler, alimentado por `LISTEN/NOTIFY` do Postgres; fallback polling a cada 5 s | Sem WebSocket próprio nem serviço externo; portável |
 | Processamento de imagem | **sharp** (em Route Handler Node) | Gera miniaturas e prévias sem tocar no original |
 | Vídeo | Capa capturada no navegador (`<video>` + canvas) no MVP; `ffmpeg` em worker em etapa futura | Evita infra de fila no MVP |
 | Integração Instagram | Módulo `instagram-provider` com duas implementações: **Meta Graph API (Business Discovery)** e **provedor de scraping** como fallback | Ver `docs/07-instagram-api.md` |
 | Validação | **Zod** | Compartilhada entre formulários e Server Actions |
-| Estado cliente | **TanStack Query** + Supabase Realtime | Cache por perfil, invalidação por evento |
+| Estado cliente | **TanStack Query** + SSE | Cache por perfil, invalidação por evento |
 | Testes | **Vitest** (unit), **Playwright** (e2e do fluxo de aprovação) | O fluxo de link é o caminho crítico |
-| Hospedagem | **Vercel** (app) + **Supabase** (dados) | Deploy por PR, preview por branch |
+| Hospedagem | **Vercel Hobby** (grátis) no piloto, em subdomínio `*.vercel.app` (sem domínio próprio por enquanto) | Deploy por PR, preview por branch. O Hobby proíbe uso comercial: ao cobrar clientes, migrar para Pro (US$ 20/mês) ou Cloudflare Workers (grátis mesmo comercial) |
 | Observabilidade | **Sentry** + logs do Vercel | Erros na importação do Instagram são o ponto frágil |
 | E-mail transacional | **Resend** | Link mágico e aviso "cliente aprovou" |
 
 Alternativa considerada e descartada no MVP: app nativo (React Native/Expo). O briefing pede
-mobile-first e acesso por link sem conta; PWA entrega os dois sem loja de apps. Se a captura de
-galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reaproveitando a API.
+mobile-first e acesso por link sem conta; PWA entrega os dois sem loja de apps. Se o PWA mostrar
+limitação (galeria, vídeo, notificações), o mesmo código é empacotado como **APK** (Capacitor ou
+Trusted Web Activity) para distribuição direta, e depois publicado na Play Store (ADR-001).
+
+**Custo do piloto: R$ 0.** Vercel Hobby, Neon free, R2 free, Resend free (3.000 e-mails/mês),
+Sentry free (5.000 erros/mês), Google Fonts. O primeiro custo aparece ao cobrar clientes
+(Vercel Pro) ou ao passar de 10 GB de mídia (R2: US$ 0,015/GB/mês).
 
 ## 2. Visão geral
 
@@ -168,20 +177,21 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
 │  ├─ /perfis/*      área do social media (route group `(app)`)     │
 │  └─ /a/[token]     página pública de aprovação (sem login)        │
 └───────────────┬───────────────────────────────┬───────────────────┘
-                │ Server Actions / Route Handlers│ Supabase JS (Realtime)
+                │ Server Actions / Route Handlers│ SSE /api/events (+ polling)
 ┌───────────────▼───────────────────────────────▼───────────────────┐
-│  Next.js server (Vercel)                                          │
-│  ├─ auth guard, validação Zod, regras de negócio                  │
-│  ├─ /api/media/upload-url   → URL assinada para upload direto     │
+│  Next.js server (Vercel Hobby)                                    │
+│  ├─ Auth.js (link mágico + Google), validação Zod, regras         │
+│  ├─ /api/media/upload-url   → URL pré-assinada S3 (upload direto) │
 │  ├─ /api/media/process      → sharp: thumb 320, preview 1080      │
-│  ├─ /api/instagram/import   → provider (Graph API | scraping)     │
-│  └─ /api/approval/[token]/decide → chama decide_approval() SQL    │
+│  ├─ /api/instagram/import   → provider (Graph API | fallback)     │
+│  ├─ /api/approval/[token]/decide → transação decideApproval()     │
+│  └─ /api/events             → SSE via LISTEN/NOTIFY               │
 └───────┬───────────────┬────────────────────┬──────────────────────┘
         │               │                    │
 ┌───────▼─────┐ ┌───────▼────────┐ ┌─────────▼───────────┐
-│ Postgres    │ │ Storage        │ │ Meta Graph API /    │
-│ (Supabase)  │ │ originals/     │ │ provedor fallback   │
-│ RLS por     │ │ previews/      │ │ cache 24 h          │
+│ Postgres    │ │ R2 (API S3)    │ │ Meta Graph API /    │
+│ (Neon free) │ │ originals/     │ │ provedor fallback   │
+│ filtro por  │ │ previews/      │ │ cache 24 h          │
 │ workspace   │ │ thumbs/ ig-cache│ │                     │
 └─────────────┘ └────────────────┘ └─────────────────────┘
 ```
@@ -190,7 +200,7 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
 
 | Módulo | Responsabilidade | Principais arquivos (proposta) |
 |---|---|---|
-| `auth` | Login por e-mail mágico/Google, sessão, workspace padrão | `app/(auth)/*`, `lib/supabase/*` |
+| `auth` | Login por e-mail mágico/Google (Auth.js), sessão, workspace padrão | `app/(auth)/*`, `lib/auth/*` |
 | `profiles` | Conectar @, importar cabeçalho e posts, reimportar, remover | `app/(app)/perfis/*` (URL `/perfis`), `lib/instagram/*` |
 | `feed` | Grade simulada: posts importados + planejados, ordenação, abas | `components/feed/*`, `lib/feed/order.ts` |
 | `posts` | CRUD de publicações, mídia, legenda, hashtags, status | `app/(app)/perfis/[id]/posts/*`, `lib/posts/*` |
@@ -217,8 +227,9 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
 
 1. Cliente pede `POST /api/media/upload-url` com nome, tipo e tamanho (limites: imagem 30 MB,
    vídeo 300 MB e 90 s; tipos jpg, png, heic, webp, mp4, mov).
-2. Upload **direto para o Storage** com URL assinada (não passa pelo servidor Next). Vídeos
-   usam o protocolo resumível (TUS) do Supabase Storage para sobreviver a quedas de rede.
+2. Upload **direto para o R2** com URL pré-assinada (não passa pelo servidor Next). Vídeos
+   usam *multipart upload* do S3 em partes de 10 MB, com retry por parte, para sobreviver a
+   quedas de rede.
 3. Ao concluir, `POST /api/media/process`: `sharp` lê o original, gera `thumb` (320 px, corte
    conforme `grid_crop`) e `preview` (1080 px, sem corte). O original fica intacto.
 4. Vídeo: o navegador captura um frame como capa (JPEG) e envia como segundo arquivo; a capa
@@ -250,55 +261,60 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
    `decide_approval(token, …)`, que valida o token (hash, expiração, revogação) e grava
    `approval_decisions` com `decided_at`, `ip`, `user_agent`, `approver_name`, `link_id`, e
    atualiza `posts.status`.
-5. Supabase Realtime (canal `profile:<id>`) empurra a mudança para o app do social media.
+5. A transação emite `NOTIFY approval_changed` no Postgres; o Route Handler SSE
+   `/api/events?profile=<id>` repassa ao app do social media (fallback: polling a cada 5 s).
    E-mail opcional via Resend.
 6. Link expira em 30 dias; pode ser revogado; um novo link pode ser gerado a qualquer momento.
    Decisões antigas nunca são apagadas (auditoria).
 
 ## 5. Segurança e privacidade
 
-- **RLS** em todas as tabelas: linha visível só para membros do `workspace`.
+- **Autorização na aplicação**: toda consulta passa por `requireWorkspaceMember(workspaceId)`;
+  não existe query sem filtro de workspace. RLS no Postgres fica como reforço opcional.
 - Página de aprovação lê por **token hash**, nunca por id sequencial. Rate limit por IP
   (10 decisões/min) e por token.
-- Storage privado; a UI recebe **URLs assinadas** de curta duração (1 h). A página pública
+- Bucket privado; a UI recebe **URLs pré-assinadas** de curta duração (1 h). A página pública
   recebe URLs assinadas geradas no servidor a cada render.
-- Token da Graph API e chave do provedor fallback ficam só em variáveis de ambiente do servidor.
+- Credenciais do banco, do R2, token da Graph API e chave do provedor fallback ficam só em
+  variáveis de ambiente do servidor.
 - LGPD: dados do cliente aprovador se limitam a nome opcional, IP e user agent, guardados para
-  comprovar a aprovação. Política de retenção: enquanto o perfil existir.
+  comprovar a aprovação. Retenção: registros de aprovação por 5 anos após a exclusão do perfil
+  (prova); dados importados do Instagram expiram em até 30 dias se não forem reimportados;
+  conta e conteúdo enquanto a conta existir. Detalhes em `docs/legal/`.
 
 ## 6. Ambientes e variáveis
 
 | Variável | Uso |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Cliente Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Processamento de mídia e página pública (servidor) |
+| `DATABASE_URL` | Postgres (Neon) |
+| `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Storage de mídia (API S3) |
 | `META_GRAPH_ACCESS_TOKEN`, `META_IG_USER_ID` | Business Discovery |
 | `IG_FALLBACK_PROVIDER`, `IG_FALLBACK_API_KEY` | Provedor de scraping (opcional) |
 | `RESEND_API_KEY` | E-mails |
 | `APP_URL` | Montar links de aprovação |
 | `SENTRY_DSN` | Erros |
 
-Ambientes: `local` (Supabase CLI), `preview` (Vercel por PR + projeto Supabase de staging),
-`production`.
+Ambientes: `local` (Postgres em Docker ou branch do Neon), `preview` (Vercel por PR + branch de
+staging no Neon + bucket `aprovo-media-staging`), `production`.
 
 ## 7. Performance e limites
 
 - Grade carrega miniaturas de 320 px (≈ 20–40 KB cada); 60 itens ≈ 2 MB.
 - Página de aprovação: alvo LCP < 2,5 s em 4G.
-- Supabase free tier aguenta o piloto (500 MB DB, 1 GB Storage). Em produção, plano Pro
-  (US$ 25/mês) + Storage por uso. Originais de vídeo serão o maior custo; política futura de
-  expurgo de originais 90 dias após aprovação.
+- Tiers gratuitos aguentam o piloto: Neon 0,5 GB de banco (metadados ocupam poucos MB), R2
+  10 GB de mídia (≈ 2.500 fotos de 4 MB ou ≈ 100 vídeos de 100 MB). Originais de vídeo serão o
+  maior consumo; política de expurgo de originais X dias após a aprovação (ADR-004).
 
-
-\newpage
 
 # 03 · Modelo de dados
 
-Postgres (Supabase). Todas as tabelas têm `id uuid default gen_random_uuid()`, `created_at` e
-`updated_at`, exceto as tabelas de ligação (`workspace_members`, `approval_items`), que usam
-chave composta. RLS filtra por `workspace_id`: direto onde a coluna existe (`profiles`,
-`media_assets`) e por junção `… → profile → workspace_id` nas demais (`posts`, `imported_posts`,
-`approval_*`, `activity_log`), via função `is_workspace_member(profile_id)`.
+Postgres padrão (hoje no Neon free; portável). Todas as tabelas têm `id uuid default
+gen_random_uuid()`, `created_at` e `updated_at`, exceto as tabelas de ligação
+(`workspace_members`, `approval_items`), que usam chave composta. A autorização é feita na
+aplicação: toda consulta filtra por `workspace_id`, direto onde a coluna existe (`profiles`,
+`media_assets`) e por junção `… → profile → workspace_id` nas demais (`posts`,
+`imported_posts`, `approval_*`, `activity_log`), pelo helper `requireWorkspaceMember`.
 
 ## 1. Diagrama
 
@@ -323,13 +339,17 @@ workspaces ──< workspace_members >── auth.users
 | Coluna | Tipo | Notas |
 |---|---|---|
 | name | text | "Agência X" ou nome do freelancer |
-| owner_id | uuid → auth.users | |
+| owner_id | uuid → users | |
+
+### `users`, `accounts`, `sessions`, `verification_tokens` (Auth.js)
+Tabelas padrão do adaptador Drizzle do Auth.js: usuário (e-mail, nome, avatar), contas OAuth
+(Google), sessões e tokens do link mágico.
 
 ### `workspace_members`
 | Coluna | Tipo | Notas |
 |---|---|---|
 | workspace_id | uuid → workspaces | |
-| user_id | uuid → auth.users | |
+| user_id | uuid → users | |
 | role | enum `owner, editor` | `viewer` fica para depois |
 | PK | (workspace_id, user_id) | |
 
@@ -381,7 +401,7 @@ workspaces ──< workspace_members >── auth.users
 | scheduled_for | timestamptz | "data prevista" (calendário fica para depois) |
 | notes | text | observações internas, não vão para o cliente |
 | archived_at | timestamptz | "Arquivar": some da grade sem apagar; reversível |
-| created_by | uuid → auth.users | |
+| created_by | uuid → users | |
 | sent_for_approval_at, approved_at | timestamptz | |
 
 ### `post_media` (mídias de uma publicação, ordenadas)
@@ -486,27 +506,29 @@ Regras:
 - `approval_decisions (post_id, decided_at desc)` para pegar a última decisão.
 - `media_assets (workspace_id, sha256)` para dedup.
 
-## 5. Políticas RLS (resumo)
+## 5. Autorização (resumo)
 
-| Tabela | select | insert/update/delete |
+| Tabela | leitura | escrita |
 |---|---|---|
-| workspaces, profiles, posts, post_media, media_assets, imported_posts, activity_log, approval_requests, approval_items, approval_links | membro do workspace | membro com role `owner` ou `editor` |
-| approval_decisions | membro do workspace | **nenhum** (nem membro, nem anon); só a função `decide_approval(token, …)` com `security definer`, chamada pelo Route Handler `/api/approval/[token]/decide`, insere |
-| Página pública `/a/[token]` | usa `service_role` no servidor, lendo apenas o que o request contém | — |
+| workspaces, profiles, posts, post_media, media_assets, imported_posts, activity_log, approval_requests, approval_items, approval_links | membro do workspace (`requireWorkspaceMember`) | membro com role `owner` ou `editor` |
+| approval_decisions | membro do workspace | **só** a transação `decideApproval(token, …)` do servidor, chamada pelo Route Handler `/api/approval/[token]/decide`; nunca editada ou apagada |
+| Página pública `/a/[token]` | servidor lê apenas o que o request do token contém | — |
 
-## 6. Storage (buckets)
+RLS no Postgres pode ser ligado depois como segunda camada; o modelo não depende disso.
 
-| Bucket | Público? | Conteúdo |
-|---|---|---|
-| `originals` | não | arquivos enviados, intactos |
-| `previews` | não | 1080 px |
-| `thumbs` | não | 320 px, já com o corte da grade |
-| `ig-cache` | não | avatar e miniaturas importadas do Instagram |
+## 6. Storage (R2, API S3)
 
-Caminho: `<workspace_id>/<asset_id>/<nome>`. Acesso só por URL assinada.
+Um bucket privado `aprovo-media` com quatro prefixos:
 
+| Prefixo | Conteúdo |
+|---|---|
+| `originals/` | arquivos enviados, intactos |
+| `previews/` | 1080 px |
+| `thumbs/` | 320 px, já com o corte da grade |
+| `ig-cache/` | avatar e miniaturas importadas do Instagram |
 
-\newpage
+Chave: `<prefixo>/<workspace_id>/<asset_id>/<nome>`. Acesso só por URL pré-assinada.
+
 
 # 04 · Telas e fluxos
 
@@ -541,6 +563,8 @@ de aceite. Padrões de interação seguem o MyFeed (ver `docs/06-referencia-myfe
 - Login por e-mail (link mágico) ou Google. Primeiro acesso cria `workspace` + `member owner`.
 - Lista de perfis: avatar, @, contadores de publicações por status (ex.: "2 aguardando").
   Estado vazio leva à Tela 01.
+- Menu da conta: nome, e-mail, sair, e **Configurações › Conta › Excluir conta** (apaga a
+  conta e o conteúdo; registros de aprovação ficam anonimizados conforme `docs/legal/`).
 
 **Aceite:** novo usuário chega ao feed de um perfil em até 3 passos (login → conectar → feed).
 
@@ -721,8 +745,6 @@ registro guarda data, hora, link e comentário.
 - Foco visível e rótulos em todos os ícones.
 
 
-\newpage
-
 # 05 · Roadmap, épicos e estimativas
 
 Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias úteis. Com 2 devs os
@@ -732,7 +754,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 
 | Fase | Épicos | Dias | Entrega |
 |---|---|---|---|
-| 0 · Fundação | E0 | 3 | Repo, CI, Supabase, design system, deploy vazio |
+| 0 · Fundação | E0 | 3 | Repo, CI, Postgres, R2, Auth.js, design system, deploy vazio |
 | 1 · Perfil e feed | E1, E2 | 8 | Conectar @ e ver o feed simulado (Telas 01, 02) |
 | 2 · Publicações | E3, E4 | 10 | Criar post/vídeo, upload, detalhe, edição (Telas 03, 04, 05) |
 | 3 · Organização | E5 | 4 | Drag & drop, status, filtros (Tela 06) |
@@ -745,14 +767,16 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 ### E0 · Fundação (3 d)
 - [ ] `create-next-app` com TypeScript, App Router, Tailwind, ESLint, Prettier
 - [ ] shadcn/ui + tokens do design system (`docs/09-design-system.md`), Poppins, Lucide
-- [ ] Projeto Supabase (local + staging), Drizzle, primeira migration (workspaces, members, profiles)
-- [ ] Auth (e-mail mágico + Google), middleware de proteção de rotas, criação do workspace
+- [ ] Postgres gratuito (Neon) com branch de staging, Drizzle + drizzle-kit, primeira migration (users/auth, workspaces, members, profiles)
+- [ ] Auth.js (e-mail mágico via Resend + Google), middleware de proteção de rotas, criação do workspace
+- [ ] Bucket R2 `aprovo-media` com chave de API e CORS para upload direto
+- [ ] Logo do briefing (`assets/brand/aprovo-logo.png`) no header e no manifest
 - [ ] CI no GitHub Actions: lint, typecheck, vitest; deploy preview na Vercel
 - [ ] Sentry (`SENTRY_DSN`), variáveis de ambiente documentadas em `.env.example`
 
 ### E1 · Integração Instagram (5 d)
 - [ ] Interface `InstagramProvider` (`fetchProfile`, `fetchMedia`)
-- [ ] Implementação Graph API Business Discovery com token do APROVO
+- [ ] Implementação Graph API Business Discovery com token da conta ponte (perfil do João convertido em Criador de conteúdo)
 - [ ] Implementação fallback (provedor de scraping) atrás de feature flag
 - [ ] Importação manual (upload de imagens + formulário)
 - [ ] Cópia de avatar/miniaturas para o bucket `ig-cache`
@@ -766,7 +790,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [ ] Proporção da grade configurável (1:1 / 3:4)
 
 ### E3 · Mídia (5 d)
-- [ ] Upload direto com URL assinada (resumível/TUS para vídeo), progresso, retry, limites (30 MB imagem, 300 MB e 90 s vídeo)
+- [ ] Upload direto com URL pré-assinada (multipart S3 para vídeo), progresso, retry, limites (30 MB imagem, 300 MB e 90 s vídeo)
 - [ ] Route Handler de processamento com `sharp` (thumb 320 c/ crop, preview 1080, HEIC)
 - [ ] Captura de capa de vídeo no navegador + escolha de frame
 - [ ] Editor de enquadramento da miniatura (`grid_crop`) com pinça/arrastar
@@ -788,7 +812,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [ ] Alternativa acessível (mover para cima/baixo)
 
 ### E6 · Aprovação (6 d)
-- [ ] Tabelas `approval_*`, função `decide_approval` (security definer), Route Handler `/api/approval/[token]/decide`, rate limit (10 decisões/min por IP e por token)
+- [ ] Tabelas `approval_*`, transação `decideApproval` com `NOTIFY`, Route Handler `/api/approval/[token]/decide`, rate limit (10 decisões/min por IP e por token)
 - [ ] Folha "Compartilhar link": escopo, título, recado, geração do token, copiar/WhatsApp/share
 - [ ] Página pública `/a/[token]` SSR com Open Graph, feed destacado, detalhe, decisões
 - [ ] `ApprovalBar`: nome do aprovador, comentário obrigatório em ajustes, "Aprovar todos"
@@ -796,17 +820,18 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [ ] Testes e2e Playwright: enviar → abrir link → aprovar → status atualizado
 
 ### E7 · Retorno em tempo real e histórico (2 d)
-- [ ] Supabase Realtime por perfil, toasts, invalidação do TanStack Query
+- [ ] SSE `/api/events` com `LISTEN/NOTIFY` do Postgres (fallback polling 5 s), toasts, invalidação do TanStack Query
 - [ ] Tela "Aprovações": envios, links, aberturas, decisões (data, hora, link, comentário)
 - [ ] Eventos de aprovação no `activity_log` e exibição no detalhe da publicação
 
 ### E8 · Lançamento (5 d)
 - [ ] PWA: manifest, ícones, splash, `display: standalone`, atualização de versão
+- [ ] Configurações da conta: "Excluir conta" (exigido pela política de privacidade e pela Meta) e exportação simples dos dados
 - [ ] E-mails Resend: link mágico customizado, "cliente decidiu"
 - [ ] QA em iOS Safari, Android Chrome, desktop; performance (LCP da página pública)
-- [ ] Política de privacidade e termos (necessários também para o app na Meta)
+- [ ] Revisar com advogado(a) e publicar Política de Privacidade, Termos de Uso e Instruções de exclusão de dados (rascunhos em `docs/legal/`); cadastrar as URLs no app da Meta
 - [ ] Piloto com 3 perfis reais da CPCann; ajustes
-- [ ] Produção: domínio, Supabase Pro, backups
+- [ ] Produção: subdomínio `vercel.app` (domínio próprio depois), backup do Postgres, revisão dos limites gratuitos; ao cobrar clientes, sair do Vercel Hobby
 
 ## Marcos de demonstração
 
@@ -823,14 +848,13 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 1. **Calendário completo** (visão mês/semana, arrastar entre datas).
 2. **Publicação e agendamento no Instagram** via Instagram Login do cliente + Content Publishing
    API (requer App Review na Meta e conta profissional do cliente).
+   2b. **APK / Play Store** se o PWA mostrar limitação (Capacitor ou Trusted Web Activity).
 3. Stories e destaques; informações de perfil editáveis na simulação.
 4. Comentários em thread no link e marcação na imagem.
 5. Notificações push (Web Push) e WhatsApp (API oficial).
 6. Planos e cobrança (Stripe), limites por workspace, membros com papéis.
 7. Outras redes.
 
-
-\newpage
 
 # 06 · Referência de uso: My Feed · Grid Preview & Planner
 
@@ -940,8 +964,6 @@ que é dedução de apps do mesmo tipo está marcado **[inferido]**.
   países, spark.mwm.ai, screensdesign.com), lidos apenas como trechos.
 
 
-\newpage
-
 # 07 · Como carregar o feed do Instagram pelo @ (estado em novembro de 2026)
 
 Pesquisa feita com busca web e conhecimento prévio. A rede desta sessão bloqueia
@@ -991,9 +1013,14 @@ comments_count,children{media_url,media_type}}}`
 
 ### Como provisionar (fase 1)
 
-1. Conta do Instagram do APROVO/CPCann convertida em **Profissional** (Business).
-2. Página do Facebook ligada a ela (necessária na versão Facebook Login).
-3. App em **developers.facebook.com** com o produto Instagram; João como admin.
+1. **Conta ponte:** o perfil pessoal do João convertido em **Profissional** (tipo "Criador de
+   conteúdo"; gratuito, reversível, feito em Configurações → Tipo de conta). Uma conta pessoal
+   **não** serve como ponte: a Graph API só emite token para contas profissionais. Se não quiser
+   converter, usar outra conta profissional. A conta da CPCann não será usada.
+2. Página do Facebook ligada a ela só se usarmos a versão Facebook Login; com Instagram Login
+   não é necessária.
+3. App em **developers.facebook.com** com o produto Instagram, criado depois com Claude Cowork;
+   João como admin.
 4. Gerar token de usuário no Graph API Explorer com os escopos acima e trocar por **token de
    longa duração (60 dias)**; agendar renovação automática (cron semanal) no servidor.
 5. Guardar `META_GRAPH_ACCESS_TOKEN` e `META_IG_USER_ID` nas variáveis do servidor.
@@ -1078,75 +1105,115 @@ Implementações: `GraphBusinessDiscoveryProvider`, `ScrapingProvider` (flag), `
 - https://scrapecreators.com/blog/apify-instagram-scraper-benchmark
 
 
-\newpage
-
 # 08 · Decisões de arquitetura (ADRs) e riscos
+
+Decisões revisadas com o João em 06/11/2026. Cada ADR traz a decisão, o que o João definiu e
+as consequências.
 
 ## Decisões
 
-### ADR-001 · Web app PWA em vez de app nativo
+### ADR-001 · Web app PWA primeiro; APK como plano B
 **Contexto:** briefing pede mobile-first e aprovação sem conta; equipe pequena.
-**Decisão:** Next.js + PWA. **Consequências:** sem loja de apps, link universal funciona; galeria
-e vídeo via `<input type="file">` (sem acesso contínuo à biblioteca de fotos). Reavaliar Expo se
-o piloto mostrar limitação.
+**Decisão do João:** web app é o caminho mais fácil; se der problema, empacotar como APK para
+distribuição direta até publicar na Play Store.
+**Como fazemos:** Next.js como PWA instalável. O mesmo código pode ser empacotado como APK com
+Capacitor (WebView + plugins nativos de galeria/arquivos) ou Trusted Web Activity (abre o PWA
+dentro de um app Android). O gatilho para o APK é uma limitação concreta do PWA no piloto:
+galeria, vídeo grande, notificações ou instalação no iOS.
+**Consequências:** sem loja de apps no início; link universal funciona em qualquer celular; a
+arquitetura não muda se o APK for necessário.
 
-### ADR-002 · Supabase como backend único
-**Contexto:** precisamos de auth, Postgres, storage e tempo real rapidamente.
-**Decisão:** Supabase com RLS. **Consequências:** lock-in moderado (Postgres padrão mitiga);
-Realtime resolve a Tela 07 sem WebSocket próprio.
+### ADR-002 · Engine própria e portável, em tiers gratuitos
+**Contexto:** a proposta inicial usava Supabase (Auth + Storage + Realtime + Postgres) só por
+custo e velocidade.
+**Decisão do João:** não ficar refém do Supabase; o objetivo é custo baixo (grátis).
+**Como fazemos:** cada peça em padrão aberto, hoje gratuita, trocável por configuração:
+- Banco: Postgres padrão no **Neon free** (0,5 GB) via Drizzle; migrations no repo.
+- Autenticação: **Auth.js** dentro do app (link mágico por e-mail via Resend + Google); sessões
+  no Postgres.
+- Mídia: **Cloudflare R2** pela API S3 (10 GB grátis, sem taxa de saída); qualquer S3 serve.
+- Tempo real: **SSE** em Route Handler com `LISTEN/NOTIFY` do Postgres; fallback polling.
+- Hospedagem: **Vercel Hobby** (grátis) em subdomínio `vercel.app`, sem domínio próprio por
+  enquanto. O Hobby proíbe uso comercial: ao cobrar clientes, migrar para Pro (US$ 20/mês) ou
+  Cloudflare Workers (grátis mesmo comercial).
+**Custo do piloto: R$ 0.**
+**Consequências:** um pouco mais de código próprio (auth, SSE, upload S3) em troca de zero
+lock-in; RLS do Supabase sai e a autorização fica na aplicação (`requireWorkspaceMember`).
 
-### ADR-003 · Business Discovery como fonte principal do feed importado
-**Contexto:** Basic Display API foi descontinuada; o briefing pede "só o @, contas públicas".
-**Decisão:** usar a Graph API com o token da conta profissional do próprio APROVO; cobre contas
-business/creator públicas sem o cliente fazer login. Fallback por provedor de scraping atrás de
-flag, e importação manual sempre disponível. **Consequências:** contas pessoais não importam
-automaticamente; dependência de um app Meta configurado. Detalhes em `docs/07-instagram-api.md`.
+### ADR-003 · Business Discovery como fonte do feed importado
+**Contexto:** Basic Display API acabou; o briefing pede "só o @, contas públicas".
+**Decisão do João:** ok; refinar conforme o MVP/piloto mostrar.
+**Como fazemos:** Graph API com token de uma conta ponte profissional (ver dependências);
+importação manual sempre disponível; provedor de scraping atrás de flag, desligado.
+**Consequências:** contas pessoais não importam automaticamente; medir no piloto quantos
+clientes são profissionais antes de decidir sobre o fallback pago.
 
 ### ADR-004 · Originais imutáveis, derivados gerados no servidor
-**Decisão:** o arquivo enviado nunca é alterado; miniatura e prévia são derivadas por `sharp`.
-**Consequências:** custo de storage maior; garante o requisito "preservar a qualidade".
+**Contexto:** briefing exige preservar a qualidade dos arquivos e gerar prévias adequadas.
+**Pergunta do João:** como seria melhor isso?
+**Como fazemos:**
+1. O arquivo escolhido na galeria sobe **direto para o R2, sem recompressão** no navegador
+   (upload pré-assinado; vídeo em multipart). Aceitamos HEIC do iPhone e convertemos no servidor,
+   guardando o HEIC original.
+2. O servidor gera os **derivados** com `sharp`: miniatura de 320 px já com o corte da grade e
+   prévia de 1080 px em WebP; para vídeo, capa (frame escolhido) nos mesmos tamanhos.
+3. A interface **só usa derivados** (grade, detalhe, página do cliente). O original só sai do
+   bucket em "Baixar original" e, no futuro, na publicação no Instagram.
+4. **Dedup** por SHA-256: a mesma foto enviada duas vezes ocupa espaço uma vez.
+5. **Custo:** R2 dá 10 GB grátis; 1 GB ≈ 250 fotos de 4 MB ou ≈ 10 vídeos de 100 MB. Acima,
+   US$ 0,015 por GB/mês, sem cobrança de download.
+6. **Retenção:** originais podem ser expurgados X dias após a publicação aprovada (configurável,
+   com aviso na interface), mantendo os derivados para o histórico. Decidir o X no piloto.
+**Alternativa descartada:** comprimir no navegador antes do upload. Economiza storage, mas perde
+qualidade e contraria o briefing.
+**Consequências:** storage é o único custo que cresce com o uso; limites de 30 MB por imagem e
+300 MB / 90 s por vídeo seguram o pior caso.
 
-### ADR-005 · Link de aprovação com token aleatório hasheado
-**Decisão:** token de 256 bits, guardado como hash, expiração de 30 dias, revogável, e decisão
-registrada com link, data/hora, IP e user agent. **Consequências:** sem senha, sem conta, mas
-quem tem o link decide; o social media escolhe com quem compartilha.
+### ADR-005 · Link de aprovação aberto, com token aleatório hasheado
+**Decisão do João:** mantida.
+**Como fazemos:** token de 256 bits, guardado como hash, expira em 30 dias, revogável; a decisão
+registra link, data/hora, IP, user agent, nome opcional e comentário.
+**Consequências:** sem senha, sem conta; quem tem o link decide. PIN opcional fica para o
+futuro se o piloto pedir.
 
 ### ADR-006 · Decisão por publicação, não só por conjunto
-**Decisão:** cada item do envio recebe sua própria decisão; o conjunto deriva o status.
-**Consequências:** mais granular para o cliente; UI precisa de "Aprovar todos".
+**Decisão do João:** ok.
+**Consequências:** o conjunto deriva o status; UI tem "Aprovar todos".
 
 ### ADR-007 · Planejados ficam no topo da grade
-**Decisão:** publicações planejadas ocupam as primeiras posições; reordenação só entre elas.
-**Consequências:** fiel ao Instagram (novo em cima); ancoragem entre importados fica para depois.
+**Decisão do João:** sem objeção.
+**Consequências:** fiel ao Instagram (novo em cima); ancoragem entre importados fica para
+etapa futura.
 
 ## Riscos
 
 | # | Risco | Prob. | Impacto | Mitigação |
 |---|---|---|---|---|
-| R1 | Business Discovery não cobre contas pessoais ou muda de regra | Alta | Alto | Fallback por provedor + importação manual; UI explica a limitação; cache local de tudo importado |
-| R2 | Provedor de scraping instável ou com risco de ToS | Média | Médio | Atrás de feature flag; nunca único caminho; limitar a uso sob demanda |
-| R3 | Upload de vídeo grande falha em 4G | Média | Médio | Upload direto resumível (TUS do Supabase), limite 300 MB, retry |
+| R1 | Business Discovery não cobre contas pessoais ou muda de regra | Alta | Alto | Importação manual; UI explica a limitação; cache local de tudo importado; fallback atrás de flag |
+| R2 | Provedor de scraping instável ou com risco de ToS | Média | Médio | Atrás de feature flag; nunca único caminho; só com decisão do João |
+| R3 | Upload de vídeo grande falha em 4G | Média | Médio | Multipart S3 com retry por parte, limite 300 MB |
 | R4 | HEIC/iOS gera erros de processamento | Média | Baixo | `sharp` com libheif; fallback de conversão no navegador |
 | R5 | Grade divergente do Instagram (mudança de proporção 1:1 → 3:4) | Alta | Baixo | Proporção configurável por perfil (`profiles.grid_ratio`) |
 | R6 | Link vaza e terceiro aprova | Baixa | Médio | Expiração, revogação, nome do aprovador, IP/UA registrados, opção futura de PIN |
-| R7 | Custo de storage com originais de vídeo | Média | Médio | Política de expurgo de originais após X dias da aprovação (etapa futura) |
-| R8 | PWA no iOS sem notificações confiáveis | Alta | Baixo | Realtime enquanto aberto + e-mail; push fica para depois |
+| R7 | Custo de storage com originais de vídeo | Média | Médio | 10 GB grátis no R2; política de expurgo de originais (ADR-004) |
+| R8 | PWA no iOS sem notificações confiáveis | Alta | Baixo | SSE enquanto aberto + e-mail; push fica para depois; APK como plano B (ADR-001) |
 | R9 | Escopo cresce para calendário/publicação | Média | Alto | Briefing adia explicitamente; roadmap separa etapas |
+| R10 | Vercel Hobby não permite uso comercial | Certa ao cobrar | Médio | Migrar para Pro ou Cloudflare Workers antes de cobrar; app não depende de recursos exclusivos da Vercel |
+| R11 | Conta ponte pessoal não gera token na Graph API | Alta | Alto | Converter o perfil do João em Criador de conteúdo (gratuito, reversível) ou usar outra conta profissional |
+| R12 | Limites gratuitos (Neon 0,5 GB, R2 10 GB) estourarem no piloto | Baixa | Baixo | Monitorar uso; metadados são pequenos; mídia é o único volume |
 
-## Dependências externas a providenciar
+## Dependências externas (decisões do João)
 
-| Item | Responsável | Quando |
-|---|---|---|
-| Conta profissional do Instagram do APROVO/CPCann ligada a uma Página do Facebook | João | antes da fase 1 |
-| App na Meta for Developers (modo dev) com produto Instagram e token de longa duração | João + dev | fase 1 |
-| Projeto Supabase (staging e produção) | dev | fase 0 |
-| Conta Vercel e domínio (ex.: aprovo.app ou aprovo.cpcann.com) | João | fase 0 |
-| Resend com domínio verificado | dev | fase 5 |
-| Política de privacidade e termos publicados (exigência da Meta) | João | fase 5 |
-| Logo em SVG e ícones do PWA | design | fase 0 |
+| # | Item | Decisão | Responsável | Quando |
+|---|---|---|---|---|
+| 1 | Conta ponte do Instagram | Não usar a da CPCann. João envia a página pessoal dele para testar; se não funcionar (conta pessoal não gera token), converte em Criador de conteúdo ou envia outra profissional | João | antes da fase 1 |
+| 2 | App na Meta for Developers | Criar depois, com Claude Cowork | João + Claude | fase 1 |
+| 3 | Banco, storage e hospedagem | Onde for melhor, de preferência grátis: Neon, Cloudflare R2, Vercel Hobby | dev | fase 0 |
+| 4 | Domínio | Sem domínio por enquanto; subdomínio `vercel.app` | — | depois |
+| 5 | Resend com domínio verificado | Ok; sem domínio próprio, usar o domínio de teste do Resend no piloto | dev | fase 5 |
+| 6 | Política de privacidade, termos e exclusão de dados | Rascunhados pelo Claude em `docs/legal/`; revisão de advogado(a) antes de publicar | Claude + João | fase 5 |
+| 7 | Logo | Usar a do briefing: extraída para `assets/brand/aprovo-logo.png`; vetor fica pendente | — | feito |
 
-
-\newpage
 
 # 09 · Design system
 
@@ -1219,10 +1286,283 @@ verde do logo sobre roxo principal.
 
 ## Assets necessários
 
-- Logo APROVO em SVG (horizontal e símbolo).
+- Logo: raster extraído do briefing em `assets/brand/aprovo-logo.png` (794×346, fundo
+  transparente). Vetor SVG e símbolo isolado ficam pendentes.
 - Ícones PWA 192/512 px e máscara (maskable), splash iOS.
 - Imagem Open Graph padrão para links de aprovação (1200×630).
 
 
-\newpage
+# 10 · Documentos legais (rascunhos)
+
+
+> Rascunho gerado para revisão de advogado(a). Não constitui aconselhamento jurídico.
+
+## Arquivos
+
+- `politica-de-privacidade.md`: Política de Privacidade (LGPD e requisitos da Meta).
+- `termos-de-uso.md`: Termos de Uso.
+- `exclusao-de-dados.md`: página "Instruções para exclusão de dados" (exigida pela Meta).
+
+## Placeholders a preencher
+
+- `[RAZÃO SOCIAL / NOME DO CONTROLADOR]`, `CNPJ/CPF [•]`, endereço.
+- `[privacidade@•]` (e-mail de contato) e dados do Encarregado (DPO).
+- Lista de provedores (nuvem, e-mail, monitoramento) e, se ativado, provedor de dados de terceiros.
+- `[data]` de última atualização, `[comarca •]`, canal de suporte, prazo de logs, valor do teto de responsabilidade.
+
+## Checklist antes de publicar
+
+- [ ] Revisão por advogado(a), incluindo prazos de retenção e bases legais.
+- [ ] Preencher todos os placeholders e conferir se o app realmente faz o que os textos descrevem (ex.: botão "Excluir conta", 15 dias, 30 dias de cache).
+- [ ] Publicar em URLs públicas, sem login (política, termos e exclusão de dados).
+- [ ] Cadastrar as URLs nas configurações do app Meta (Privacy Policy URL, Terms of Service URL, Data Deletion Instructions URL).
+- [ ] Linkar os documentos no rodapé do app e na tela de cadastro.
+- [ ] Revisar os textos sempre que houver mudança de provedor ou de dados coletados.
+
+
+## Política de Privacidade do APROVO
+
+> Rascunho gerado para revisão de advogado(a). Não constitui aconselhamento jurídico.
+
+Última atualização: [data]
+
+## 1. Quem somos
+
+O APROVO é um aplicativo web (PWA) em que social medias organizam o feed do Instagram de seus clientes, planejam publicações e enviam links de aprovação. Esta Política explica como tratamos dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018).
+
+- **Controlador:** [RAZÃO SOCIAL / NOME DO CONTROLADOR], CNPJ/CPF [•].
+- **Contato de privacidade:** [privacidade@•].
+- **Encarregado (DPO):** [NOME DO ENCARREGADO], [contato].
+
+## 2. Dados que coletamos
+
+### 2.1 Usuários (social medias com conta)
+
+- **Cadastro:** e-mail, nome (quando fornecido ou vindo do Google) e foto de perfil do Google, se você usar o login com Google.
+- **Conteúdo enviado:** fotos, vídeos, legendas, hashtags, datas previstas e a ordem das publicações. Guardamos o arquivo original sem alteração e geramos pré-visualizações derivadas.
+- **Uso do serviço:** perfis conectados, registro de atividades (quem fez o quê em cada perfil) e dados técnicos de sessão.
+- **Dados técnicos:** endereço IP, tipo de navegador e registros de erro, para segurança e diagnóstico.
+
+### 2.2 Aprovadores (clientes que abrem o link de aprovação)
+
+O aprovador não cria conta. Ao aprovar ou pedir ajustes, registramos:
+
+- nome (opcional, se informado);
+- decisão (aprovado ou ajustes solicitados);
+- comentário (se houver);
+- data e hora;
+- identificador do link;
+- endereço IP e *user agent* do navegador.
+
+Esse conjunto serve como **prova da aprovação**.
+
+### 2.3 Perfis públicos do Instagram
+
+Quando o usuário informa o @ de um perfil público, obtemos, pela API oficial da Meta (Instagram Graph API, recurso *Business Discovery*), dados que o próprio titular já tornou públicos: nome, biografia, foto de perfil, contagem de seguidores e miniaturas de publicações recentes. Esses dados ficam em cache no armazenamento do APROVO. Não pedimos senha nem login do titular do perfil.
+
+Opcionalmente, o APROVO poderá usar um provedor de dados de terceiros para obter as mesmas informações públicas. Essa opção vem **desativada por padrão** e, se for ativada, esta Política será atualizada e o provedor listado.
+
+## 3. Como usamos os dados e bases legais
+
+| Finalidade | Dados | Base legal (LGPD, art. 7º) |
+|---|---|---|
+| Criar e autenticar a conta | E-mail, nome, dados de login Google | Execução de contrato (V) |
+| Prestar o serviço: planejar, armazenar mídias e gerar prévias | Conteúdo enviado, perfis conectados | Execução de contrato (V) |
+| Exibir o perfil do cliente e o feed simulado | Dados públicos do Instagram em cache | Legítimo interesse (IX) e execução de contrato (V) |
+| Registrar a aprovação como prova | Nome opcional, decisão, comentário, data/hora, link, IP, *user agent* | Legítimo interesse (IX) e execução de contrato (V); exercício regular de direitos (VI) |
+| Enviar e-mails de acesso e avisos de aprovação | E-mail, status da aprovação | Execução de contrato (V) |
+| Segurança, prevenção a fraude e abuso | IP, *user agent*, registros de acesso | Legítimo interesse (IX) |
+| Monitorar erros e melhorar a estabilidade | Registros técnicos de erro | Legítimo interesse (IX) |
+| Cumprir obrigações legais e responder a autoridades | Conforme exigido | Obrigação legal (II) |
+
+Não vendemos dados pessoais nem os usamos para publicidade de terceiros.
+
+## 4. Compartilhamento
+
+Compartilhamos dados apenas com operadores necessários ao serviço, sob contrato e com dever de confidencialidade:
+
+- **Provedores de infraestrutura em nuvem** (hospedagem, banco de dados, autenticação e armazenamento de arquivos): [lista de provedores •].
+- **E-mail transacional** (link de acesso e avisos): [provedor •].
+- **Monitoramento de erros e logs:** [provedor •].
+- **Meta Platforms** (API do Instagram): enviamos o @ consultado para obter dados públicos, nos termos da Meta.
+- **Provedor de dados de terceiros** (opcional, desativado por padrão): [•].
+- **Autoridades**, quando houver obrigação legal ou ordem judicial.
+
+O usuário também controla o compartilhamento: quem recebe um link de aprovação consegue ver o conteúdo vinculado a ele.
+
+## 5. Transferência internacional
+
+Parte da infraestrutura pode ficar nos Estados Unidos e/ou no Brasil. Quando há transferência para o exterior, ela ocorre com base no art. 33 da LGPD, por meio de cláusulas contratuais adequadas, de garantias de proteção equivalentes ou de outro mecanismo previsto em lei. Você pode pedir informações sobre as garantias adotadas pelo e-mail [privacidade@•].
+
+## 6. Retenção
+
+| Dado | Prazo |
+|---|---|
+| Dados da conta e conteúdo do usuário | Enquanto a conta existir; excluídos após o encerramento, salvo o que a lei exigir |
+| Registros de aprovação | 5 anos após a exclusão do perfil, como prova (exercício regular de direitos) |
+| Mídias originais | Enquanto necessárias ao serviço; podem ser eliminadas por política de retenção, com aviso prévio ao usuário |
+| Cache de dados do Instagram | Atualizado ou expirado em até 30 dias |
+| Registros técnicos e de segurança | [prazo •], conforme o provedor |
+
+Após os prazos, os dados são excluídos ou anonimizados.
+
+## 7. Segurança
+
+Adotamos medidas técnicas e administrativas razoáveis: tráfego criptografado (HTTPS), controle de acesso por conta e por espaço de trabalho, links de arquivos com URL assinada e expiração, links de aprovação com identificador não previsível, separação de dados entre usuários e registro de atividades. Nenhum sistema é totalmente seguro. Em caso de incidente com risco relevante, comunicaremos os titulares e a ANPD, conforme o art. 48 da LGPD.
+
+## 8. Seus direitos e como exercer
+
+Conforme o art. 18 da LGPD, você pode pedir: confirmação de que tratamos seus dados; acesso; correção; anonimização, bloqueio ou eliminação de dados desnecessários ou tratados em desconformidade; portabilidade; eliminação dos dados tratados com consentimento; informação sobre compartilhamento; informação sobre a possibilidade de não consentir e suas consequências; e revogação do consentimento, quando for a base legal.
+
+Para exercer esses direitos, escreva para [privacidade@•]. Responderemos em até 15 dias. Podemos pedir informações para confirmar sua identidade. Alguns dados, como os registros de aprovação, podem ser mantidos para cumprir obrigação legal ou exercer direitos, e nesses casos podemos oferecer a anonimização. Veja o passo a passo em **Instruções para exclusão de dados** (`exclusao-de-dados.md`). Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).
+
+## 9. Cookies e armazenamento local
+
+Usamos apenas o necessário para o funcionamento:
+
+- **Essenciais:** cookies e *localStorage* para manter a sessão, a segurança do login e preferências do app (por exemplo, o último perfil aberto) e para o funcionamento offline do PWA (cache do aplicativo).
+- **Desempenho e erros:** podemos usar ferramentas de monitoramento de erros que registram dados técnicos.
+
+Não usamos cookies de publicidade. Se passarmos a usar *analytics* ou outros cookies não essenciais, pediremos seu consentimento. Você pode limpar os dados do navegador a qualquer momento, mas isso pode encerrar sua sessão.
+
+## 10. Crianças e adolescentes
+
+O APROVO não é destinado a menores de 18 anos, e não coletamos dados de menores de forma intencional. Se identificarmos esse caso, excluiremos os dados. Avise-nos por [privacidade@•].
+
+## 11. Relação com Instagram e Meta
+
+O APROVO é uma ferramenta independente e **não é afiliado, patrocinado, endossado ou mantido pelo Instagram ou pela Meta Platforms, Inc.** Instagram e Meta são marcas de seus titulares. Os dados do Instagram são obtidos pela API oficial, para uso dentro do APROVO, e tratados conforme esta Política e as regras da plataforma Meta. Se você é titular de um perfil do Instagram cujos dados públicos estão em cache no APROVO e quer sua remoção, siga as instruções em `exclusao-de-dados.md`. Você também pode gerenciar suas preferências diretamente no Instagram.
+
+## 12. Alterações
+
+Podemos atualizar esta Política. A data de "Última atualização" no topo indica a versão vigente. Mudanças relevantes serão avisadas por e-mail ou no aplicativo, com antecedência razoável quando exigido.
+
+## 13. Contato
+
+Dúvidas, pedidos de titulares e solicitações de exclusão:
+
+- E-mail: [privacidade@•]
+- Encarregado (DPO): [NOME], [contato]
+- Controlador: [RAZÃO SOCIAL / NOME DO CONTROLADOR], CNPJ/CPF [•], [endereço •]
+
+
+## Termos de Uso do APROVO
+
+> Rascunho gerado para revisão de advogado(a). Não constitui aconselhamento jurídico.
+
+Última atualização: [data]
+
+## 1. Aceitação
+
+Ao criar uma conta ou usar o APROVO, você concorda com estes Termos e com a Política de Privacidade. Se não concordar, não use o serviço. O serviço é oferecido por [RAZÃO SOCIAL / NOME DO CONTROLADOR], CNPJ/CPF [•] ("APROVO"). Quem usa o serviço em nome de uma empresa declara ter poderes para isso.
+
+## 2. Definições
+
+- **Usuário:** pessoa com conta (social media, freelancer ou agência).
+- **Aprovador:** pessoa que acessa um link de aprovação, sem criar conta.
+- **Perfil conectado:** perfil público do Instagram de um cliente, adicionado pelo @.
+- **Conteúdo:** fotos, vídeos, legendas, hashtags, comentários e dados inseridos no APROVO.
+- **Link de aprovação:** endereço único para ver uma prévia e decidir.
+
+## 3. Cadastro e conta
+
+O cadastro é por e-mail (link de acesso) ou Google. O usuário deve ter 18 anos ou mais, fornecer dados verdadeiros e manter seu e-mail seguro. É responsável pelas atividades feitas na conta e deve avisar imediatamente sobre uso não autorizado. Cada pessoa deve usar a própria conta.
+
+## 4. Perfis conectados e conteúdo de terceiros
+
+O APROVO exibe dados públicos do perfil informado, obtidos pela API oficial da Meta. Ao conectar um perfil e enviar mídias, o usuário **declara e garante que**:
+
+1. tem autorização do cliente (titular do perfil e dos direitos sobre as mídias) para conectar o perfil, usar as mídias e submetê-las à aprovação;
+2. o conteúdo não viola direitos de terceiros, como autoria, imagem, privacidade ou marca, nem a lei;
+3. obteve as autorizações necessárias de pessoas que apareçam no conteúdo.
+
+O usuário responde por reclamações de terceiros decorrentes do descumprimento dessas declarações. O APROVO não é afiliado ao Instagram ou à Meta e não garante a disponibilidade dos dados obtidos de lá.
+
+## 5. Links de aprovação
+
+O usuário decide com quem compartilha cada link e é responsável por isso. Quem tiver o link poderá ver o conteúdo e registrar uma decisão, então envie-o apenas ao aprovador pretendido. O APROVO registra, de cada decisão, nome opcional, decisão, comentário, data/hora, identificador do link, IP e *user agent*. Esse registro vale como **manifestação de vontade do aprovador** e como prova da aprovação entre o usuário e seu cliente, sem prejuízo de outras provas. Editar uma publicação já aprovada pode exigir nova aprovação. O usuário deve informar o aprovador sobre o registro desses dados.
+
+## 6. Propriedade intelectual
+
+O conteúdo continua sendo do usuário ou de seu cliente. O usuário concede ao APROVO uma licença limitada, não exclusiva, mundial e revogável, apenas pelo tempo necessário, para hospedar, copiar, converter (gerando prévias e miniaturas), exibir e transmitir o conteúdo, exclusivamente para prestar o serviço. O APROVO mantém o original sem modificação. Software, marca, layout e documentação do APROVO pertencem ao APROVO ou a seus licenciantes. Instagram, Meta e outras marcas pertencem a seus titulares.
+
+## 7. Usos proibidos
+
+É proibido:
+
+- violar leis ou direitos de terceiros, ou enviar conteúdo ilícito, discriminatório, que incite violência, de exploração de menores ou enganoso;
+- conectar perfis sem autorização do titular;
+- fazer coleta automatizada (*scraping*) ou usar o serviço para extrair dados do Instagram em massa;
+- tentar burlar limites, segurança ou autenticação, ou acessar contas e dados de outros;
+- enviar vírus, sobrecarregar a infraestrutura ou fazer engenharia reversa, salvo quando a lei permitir;
+- revender ou sublicenciar o serviço sem autorização;
+- violar os termos e políticas da Meta/Instagram.
+
+## 8. Disponibilidade e suporte
+
+O APROVO está em versão **beta/piloto**. O serviço é oferecido "como está", sem garantia de disponibilidade contínua, ausência de erros ou preservação de dados. Pode haver instabilidades, mudanças e interrupções. Mantenha cópia dos seus arquivos originais. O suporte é prestado por [canal •], em horário comercial e sem prazo garantido. Dados do Instagram dependem da API da Meta e podem falhar ou mudar.
+
+## 9. Planos e pagamento
+
+Durante o piloto, o uso é **gratuito**. O APROVO reserva-se o direito de criar planos pagos no futuro, informando preços e condições com antecedência razoável. Nenhuma cobrança ocorrerá sem aceite do usuário. Quando houver cobrança, as regras de pagamento, renovação e cancelamento serão detalhadas aqui ou em anexo.
+
+## 10. Limitação de responsabilidade
+
+Na máxima extensão permitida pela lei, o APROVO não responde por: conteúdo enviado pelos usuários e decisões de aprovadores; lucros cessantes, perda de oportunidade ou danos indiretos; falhas ou mudanças de serviços de terceiros (incluindo Instagram/Meta, provedores de nuvem e e-mail); ou perda de dados decorrente de uso indevido ou de política de retenção anunciada. A responsabilidade total do APROVO, quando existir, limita-se ao valor pago pelo usuário nos 12 meses anteriores ao fato ou, no piloto gratuito, a [valor •]. Nada aqui exclui responsabilidade que a lei não permita excluir, inclusive a do Código de Defesa do Consumidor, quando aplicável.
+
+## 11. Rescisão
+
+O usuário pode encerrar a conta a qualquer momento, nas configurações do app ou por e-mail (veja `exclusao-de-dados.md`). O APROVO pode suspender ou encerrar contas que violem estes Termos ou a lei, ou encerrar o piloto, com aviso razoável sempre que possível. Após o encerramento, os dados são tratados conforme a Política de Privacidade (retenção). Cláusulas que por natureza devam continuar valendo (propriedade intelectual, responsabilidade, foro) permanecem.
+
+## 12. Alterações
+
+Podemos alterar estes Termos. Mudanças relevantes serão comunicadas por e-mail ou no aplicativo. O uso continuado após a vigência da nova versão indica concordância; se discordar, encerre a conta.
+
+## 13. Lei aplicável e foro
+
+Estes Termos são regidos pelas leis do Brasil. Fica eleito o foro da comarca de [comarca •], com renúncia a qualquer outro, ressalvado o foro do domicílio do consumidor, quando a lei assim determinar.
+
+Contato: [privacidade@•] | [canal de suporte •]
+
+
+## Instruções para exclusão de dados
+
+> Rascunho gerado para revisão de advogado(a). Não constitui aconselhamento jurídico.
+
+Última atualização: [data]
+
+Esta página explica como pedir a exclusão de dados pessoais tratados pelo APROVO, inclusive dados obtidos pela API da Meta/Instagram. O APROVO não é afiliado ao Instagram ou à Meta. Veja também a Política de Privacidade.
+
+## 1. Sou usuário do APROVO (tenho conta)
+
+**Pelo aplicativo:** acesse *Configurações > Conta > Excluir conta* e confirme. Removeremos sua conta, seus perfis conectados, publicações, mídias (originais e prévias) e o cache de dados do Instagram vinculados a ela.
+
+**Por e-mail:** envie para [privacidade@•], a partir do e-mail cadastrado, a mensagem "Excluir minha conta". Se usar outro e-mail, podemos pedir confirmação de identidade.
+
+Registros de aprovação ligados aos seus perfis podem ser mantidos por até 5 anos após a exclusão, como prova (veja o item 2).
+
+## 2. Sou aprovador (abri um link de aprovação)
+
+Para pedir a exclusão do seu registro de aprovação (nome, comentário, IP e *user agent*), escreva para [privacidade@•] informando o link recebido ou o identificador dele, a data aproximada e, se houver, o nome que você usou. Podemos pedir dados adicionais para localizar o registro e confirmar que é você.
+
+Esse registro serve como prova da aprovação e pode ser mantido por até 5 anos, com base no legítimo interesse e no exercício regular de direitos (LGPD, art. 7º, VI e IX, e art. 16). Quando a exclusão total não for possível, ofereceremos a **anonimização**: removeremos ou descaracterizaremos nome, IP e *user agent*, preservando apenas a decisão, a data e o vínculo com o conteúdo.
+
+## 3. Sou titular de um perfil do Instagram exibido no APROVO
+
+Se um social media conectou seu perfil público e você quer remover os dados públicos em cache (nome, bio, foto, contagem de seguidores e miniaturas), envie e-mail para [privacidade@•] com o @ do perfil. Excluiremos o cache e **desvincularemos o perfil** quando possível. Você também pode pedir que ele não seja conectado novamente. Para confirmar que você é o titular, podemos pedir que envie a solicitação de um e-mail associado ao perfil ou que publique um código temporário na bio.
+
+Os dados em cache expiram de qualquer forma em até 30 dias. Para remover o que consta no próprio Instagram, use as configurações da plataforma.
+
+## 4. Prazo de resposta
+
+Respondemos a todos os pedidos em até **15 dias** a partir do recebimento (e da confirmação de identidade, quando necessária). Informaremos o que foi excluído e o que, se algo, foi mantido e por quê. Backups podem levar um período adicional para serem sobrescritos.
+
+## 5. Contato
+
+- E-mail: [privacidade@•]
+- Encarregado (DPO): [NOME], [contato]
+- Controlador: [RAZÃO SOCIAL / NOME DO CONTROLADOR], CNPJ/CPF [•]
+
+Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).
+
 

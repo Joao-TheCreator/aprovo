@@ -2,8 +2,10 @@
 
 ## 1. Decisão de stack
 
-O MVP é um único app Next.js com Supabase atrás. A escolha privilegia **velocidade de entrega**,
-**tempo real pronto** (status de aprovação) e **custo baixo** no início.
+O MVP é um único app Next.js com uma **engine própria e portável** atrás: Postgres padrão,
+storage compatível com S3 e autenticação na aplicação. Nada fica preso a um fornecedor; cada
+peça roda hoje em **tier gratuito** e pode ser trocada sem reescrever o app (decisão do João,
+ADR-002).
 
 | Camada | Escolha | Por quê |
 |---|---|---|
@@ -12,21 +14,29 @@ O MVP é um único app Next.js com Supabase atrás. A escolha privilegia **veloc
 | Ícones | **Lucide** (traço fino arredondado) | Bate com o briefing ("ícones de traço fino arredondado") |
 | Fonte | **Poppins** via `next/font` | Identidade visual |
 | Drag & drop | **dnd-kit** | Funciona com toque, leve, acessível |
-| Banco + Auth + Storage + Realtime | **Supabase (Postgres)** | Um fornecedor cobre login (e-mail mágico + Google), arquivos com URLs assinadas, Realtime para status, RLS para isolar clientes |
-| ORM / migrations | **Drizzle ORM** + `supabase db` para migrations SQL | Tipagem forte e SQL explícito para RLS e índices |
+| Banco | **Postgres** gerenciado gratuito (**Neon** free, 0,5 GB; alternativa: Supabase free usado só como Postgres) | Padrão aberto; muda de provedor trocando a `DATABASE_URL` |
+| ORM / migrations | **Drizzle ORM** + `drizzle-kit` | Tipagem forte, migrations SQL versionadas no repo |
+| Autenticação | **Auth.js** (next-auth v5): e-mail com link mágico via Resend + Google | Roda dentro do app; sessões no Postgres; sem serviço externo de auth |
+| Storage de mídia | **Cloudflare R2** (API S3; 10 GB e 10 milhões de leituras/mês grátis; sem taxa de saída) via `@aws-sdk/client-s3` | Qualquer S3 (AWS, MinIO, Backblaze) serve no lugar |
+| Tempo real | **SSE** (Server-Sent Events) em Route Handler, alimentado por `LISTEN/NOTIFY` do Postgres; fallback polling a cada 5 s | Sem WebSocket próprio nem serviço externo; portável |
 | Processamento de imagem | **sharp** (em Route Handler Node) | Gera miniaturas e prévias sem tocar no original |
 | Vídeo | Capa capturada no navegador (`<video>` + canvas) no MVP; `ffmpeg` em worker em etapa futura | Evita infra de fila no MVP |
 | Integração Instagram | Módulo `instagram-provider` com duas implementações: **Meta Graph API (Business Discovery)** e **provedor de scraping** como fallback | Ver `docs/07-instagram-api.md` |
 | Validação | **Zod** | Compartilhada entre formulários e Server Actions |
-| Estado cliente | **TanStack Query** + Supabase Realtime | Cache por perfil, invalidação por evento |
+| Estado cliente | **TanStack Query** + SSE | Cache por perfil, invalidação por evento |
 | Testes | **Vitest** (unit), **Playwright** (e2e do fluxo de aprovação) | O fluxo de link é o caminho crítico |
-| Hospedagem | **Vercel** (app) + **Supabase** (dados) | Deploy por PR, preview por branch |
+| Hospedagem | **Vercel Hobby** (grátis) no piloto, em subdomínio `*.vercel.app` (sem domínio próprio por enquanto) | Deploy por PR, preview por branch. O Hobby proíbe uso comercial: ao cobrar clientes, migrar para Pro (US$ 20/mês) ou Cloudflare Workers (grátis mesmo comercial) |
 | Observabilidade | **Sentry** + logs do Vercel | Erros na importação do Instagram são o ponto frágil |
 | E-mail transacional | **Resend** | Link mágico e aviso "cliente aprovou" |
 
 Alternativa considerada e descartada no MVP: app nativo (React Native/Expo). O briefing pede
-mobile-first e acesso por link sem conta; PWA entrega os dois sem loja de apps. Se a captura de
-galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reaproveitando a API.
+mobile-first e acesso por link sem conta; PWA entrega os dois sem loja de apps. Se o PWA mostrar
+limitação (galeria, vídeo, notificações), o mesmo código é empacotado como **APK** (Capacitor ou
+Trusted Web Activity) para distribuição direta, e depois publicado na Play Store (ADR-001).
+
+**Custo do piloto: R$ 0.** Vercel Hobby, Neon free, R2 free, Resend free (3.000 e-mails/mês),
+Sentry free (5.000 erros/mês), Google Fonts. O primeiro custo aparece ao cobrar clientes
+(Vercel Pro) ou ao passar de 10 GB de mídia (R2: US$ 0,015/GB/mês).
 
 ## 2. Visão geral
 
@@ -36,20 +46,21 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
 │  ├─ /perfis/*      área do social media (route group `(app)`)     │
 │  └─ /a/[token]     página pública de aprovação (sem login)        │
 └───────────────┬───────────────────────────────┬───────────────────┘
-                │ Server Actions / Route Handlers│ Supabase JS (Realtime)
+                │ Server Actions / Route Handlers│ SSE /api/events (+ polling)
 ┌───────────────▼───────────────────────────────▼───────────────────┐
-│  Next.js server (Vercel)                                          │
-│  ├─ auth guard, validação Zod, regras de negócio                  │
-│  ├─ /api/media/upload-url   → URL assinada para upload direto     │
+│  Next.js server (Vercel Hobby)                                    │
+│  ├─ Auth.js (link mágico + Google), validação Zod, regras         │
+│  ├─ /api/media/upload-url   → URL pré-assinada S3 (upload direto) │
 │  ├─ /api/media/process      → sharp: thumb 320, preview 1080      │
-│  ├─ /api/instagram/import   → provider (Graph API | scraping)     │
-│  └─ /api/approval/[token]/decide → chama decide_approval() SQL    │
+│  ├─ /api/instagram/import   → provider (Graph API | fallback)     │
+│  ├─ /api/approval/[token]/decide → transação decideApproval()     │
+│  └─ /api/events             → SSE via LISTEN/NOTIFY               │
 └───────┬───────────────┬────────────────────┬──────────────────────┘
         │               │                    │
 ┌───────▼─────┐ ┌───────▼────────┐ ┌─────────▼───────────┐
-│ Postgres    │ │ Storage        │ │ Meta Graph API /    │
-│ (Supabase)  │ │ originals/     │ │ provedor fallback   │
-│ RLS por     │ │ previews/      │ │ cache 24 h          │
+│ Postgres    │ │ R2 (API S3)    │ │ Meta Graph API /    │
+│ (Neon free) │ │ originals/     │ │ provedor fallback   │
+│ filtro por  │ │ previews/      │ │ cache 24 h          │
 │ workspace   │ │ thumbs/ ig-cache│ │                     │
 └─────────────┘ └────────────────┘ └─────────────────────┘
 ```
@@ -58,7 +69,7 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
 
 | Módulo | Responsabilidade | Principais arquivos (proposta) |
 |---|---|---|
-| `auth` | Login por e-mail mágico/Google, sessão, workspace padrão | `app/(auth)/*`, `lib/supabase/*` |
+| `auth` | Login por e-mail mágico/Google (Auth.js), sessão, workspace padrão | `app/(auth)/*`, `lib/auth/*` |
 | `profiles` | Conectar @, importar cabeçalho e posts, reimportar, remover | `app/(app)/perfis/*` (URL `/perfis`), `lib/instagram/*` |
 | `feed` | Grade simulada: posts importados + planejados, ordenação, abas | `components/feed/*`, `lib/feed/order.ts` |
 | `posts` | CRUD de publicações, mídia, legenda, hashtags, status | `app/(app)/perfis/[id]/posts/*`, `lib/posts/*` |
@@ -85,8 +96,9 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
 
 1. Cliente pede `POST /api/media/upload-url` com nome, tipo e tamanho (limites: imagem 30 MB,
    vídeo 300 MB e 90 s; tipos jpg, png, heic, webp, mp4, mov).
-2. Upload **direto para o Storage** com URL assinada (não passa pelo servidor Next). Vídeos
-   usam o protocolo resumível (TUS) do Supabase Storage para sobreviver a quedas de rede.
+2. Upload **direto para o R2** com URL pré-assinada (não passa pelo servidor Next). Vídeos
+   usam *multipart upload* do S3 em partes de 10 MB, com retry por parte, para sobreviver a
+   quedas de rede.
 3. Ao concluir, `POST /api/media/process`: `sharp` lê o original, gera `thumb` (320 px, corte
    conforme `grid_crop`) e `preview` (1080 px, sem corte). O original fica intacto.
 4. Vídeo: o navegador captura um frame como capa (JPEG) e envia como segundo arquivo; a capa
@@ -118,41 +130,47 @@ galeria/vídeo no PWA se mostrar limitada, Expo entra numa fase posterior reapro
    `decide_approval(token, …)`, que valida o token (hash, expiração, revogação) e grava
    `approval_decisions` com `decided_at`, `ip`, `user_agent`, `approver_name`, `link_id`, e
    atualiza `posts.status`.
-5. Supabase Realtime (canal `profile:<id>`) empurra a mudança para o app do social media.
+5. A transação emite `NOTIFY approval_changed` no Postgres; o Route Handler SSE
+   `/api/events?profile=<id>` repassa ao app do social media (fallback: polling a cada 5 s).
    E-mail opcional via Resend.
 6. Link expira em 30 dias; pode ser revogado; um novo link pode ser gerado a qualquer momento.
    Decisões antigas nunca são apagadas (auditoria).
 
 ## 5. Segurança e privacidade
 
-- **RLS** em todas as tabelas: linha visível só para membros do `workspace`.
+- **Autorização na aplicação**: toda consulta passa por `requireWorkspaceMember(workspaceId)`;
+  não existe query sem filtro de workspace. RLS no Postgres fica como reforço opcional.
 - Página de aprovação lê por **token hash**, nunca por id sequencial. Rate limit por IP
   (10 decisões/min) e por token.
-- Storage privado; a UI recebe **URLs assinadas** de curta duração (1 h). A página pública
+- Bucket privado; a UI recebe **URLs pré-assinadas** de curta duração (1 h). A página pública
   recebe URLs assinadas geradas no servidor a cada render.
-- Token da Graph API e chave do provedor fallback ficam só em variáveis de ambiente do servidor.
+- Credenciais do banco, do R2, token da Graph API e chave do provedor fallback ficam só em
+  variáveis de ambiente do servidor.
 - LGPD: dados do cliente aprovador se limitam a nome opcional, IP e user agent, guardados para
-  comprovar a aprovação. Política de retenção: enquanto o perfil existir.
+  comprovar a aprovação. Retenção: registros de aprovação por 5 anos após a exclusão do perfil
+  (prova); dados importados do Instagram expiram em até 30 dias se não forem reimportados;
+  conta e conteúdo enquanto a conta existir. Detalhes em `docs/legal/`.
 
 ## 6. Ambientes e variáveis
 
 | Variável | Uso |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Cliente Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Processamento de mídia e página pública (servidor) |
+| `DATABASE_URL` | Postgres (Neon) |
+| `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Storage de mídia (API S3) |
 | `META_GRAPH_ACCESS_TOKEN`, `META_IG_USER_ID` | Business Discovery |
 | `IG_FALLBACK_PROVIDER`, `IG_FALLBACK_API_KEY` | Provedor de scraping (opcional) |
 | `RESEND_API_KEY` | E-mails |
 | `APP_URL` | Montar links de aprovação |
 | `SENTRY_DSN` | Erros |
 
-Ambientes: `local` (Supabase CLI), `preview` (Vercel por PR + projeto Supabase de staging),
-`production`.
+Ambientes: `local` (Postgres em Docker ou branch do Neon), `preview` (Vercel por PR + branch de
+staging no Neon + bucket `aprovo-media-staging`), `production`.
 
 ## 7. Performance e limites
 
 - Grade carrega miniaturas de 320 px (≈ 20–40 KB cada); 60 itens ≈ 2 MB.
 - Página de aprovação: alvo LCP < 2,5 s em 4G.
-- Supabase free tier aguenta o piloto (500 MB DB, 1 GB Storage). Em produção, plano Pro
-  (US$ 25/mês) + Storage por uso. Originais de vídeo serão o maior custo; política futura de
-  expurgo de originais 90 dias após aprovação.
+- Tiers gratuitos aguentam o piloto: Neon 0,5 GB de banco (metadados ocupam poucos MB), R2
+  10 GB de mídia (≈ 2.500 fotos de 4 MB ou ≈ 100 vídeos de 100 MB). Originais de vídeo serão o
+  maior consumo; política de expurgo de originais X dias após a aprovação (ADR-004).

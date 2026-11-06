@@ -47,9 +47,14 @@ comments_count,children{media_url,media_type}}}`
 
 ### Como provisionar (fase 1)
 
-1. Conta do Instagram do APROVO/CPCann convertida em **Profissional** (Business).
-2. Página do Facebook ligada a ela (necessária na versão Facebook Login).
-3. App em **developers.facebook.com** com o produto Instagram; João como admin.
+1. **Conta ponte:** o perfil pessoal do João convertido em **Profissional** (tipo "Criador de
+   conteúdo"; gratuito, reversível, feito em Configurações → Tipo de conta). Uma conta pessoal
+   **não** serve como ponte: a Graph API só emite token para contas profissionais. Se não quiser
+   converter, usar outra conta profissional. A conta da CPCann não será usada.
+2. Página do Facebook ligada a ela só se usarmos a versão Facebook Login; com Instagram Login
+   não é necessária.
+3. App em **developers.facebook.com** com o produto Instagram, criado depois com Claude Cowork;
+   João como admin.
 4. Gerar token de usuário no Graph API Explorer com os escopos acima e trocar por **token de
    longa duração (60 dias)**; agendar renovação automática (cron semanal) no servidor.
 5. Guardar `META_GRAPH_ACCESS_TOKEN` e `META_IG_USER_ID` nas variáveis do servidor.

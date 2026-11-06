@@ -7,7 +7,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 
 | Fase | Épicos | Dias | Entrega |
 |---|---|---|---|
-| 0 · Fundação | E0 | 3 | Repo, CI, Supabase, design system, deploy vazio |
+| 0 · Fundação | E0 | 3 | Repo, CI, Postgres, R2, Auth.js, design system, deploy vazio |
 | 1 · Perfil e feed | E1, E2 | 8 | Conectar @ e ver o feed simulado (Telas 01, 02) |
 | 2 · Publicações | E3, E4 | 10 | Criar post/vídeo, upload, detalhe, edição (Telas 03, 04, 05) |
 | 3 · Organização | E5 | 4 | Drag & drop, status, filtros (Tela 06) |
@@ -20,14 +20,16 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 ### E0 · Fundação (3 d)
 - [ ] `create-next-app` com TypeScript, App Router, Tailwind, ESLint, Prettier
 - [ ] shadcn/ui + tokens do design system (`docs/09-design-system.md`), Poppins, Lucide
-- [ ] Projeto Supabase (local + staging), Drizzle, primeira migration (workspaces, members, profiles)
-- [ ] Auth (e-mail mágico + Google), middleware de proteção de rotas, criação do workspace
+- [ ] Postgres gratuito (Neon) com branch de staging, Drizzle + drizzle-kit, primeira migration (users/auth, workspaces, members, profiles)
+- [ ] Auth.js (e-mail mágico via Resend + Google), middleware de proteção de rotas, criação do workspace
+- [ ] Bucket R2 `aprovo-media` com chave de API e CORS para upload direto
+- [ ] Logo do briefing (`assets/brand/aprovo-logo.png`) no header e no manifest
 - [ ] CI no GitHub Actions: lint, typecheck, vitest; deploy preview na Vercel
 - [ ] Sentry (`SENTRY_DSN`), variáveis de ambiente documentadas em `.env.example`
 
 ### E1 · Integração Instagram (5 d)
 - [ ] Interface `InstagramProvider` (`fetchProfile`, `fetchMedia`)
-- [ ] Implementação Graph API Business Discovery com token do APROVO
+- [ ] Implementação Graph API Business Discovery com token da conta ponte (perfil do João convertido em Criador de conteúdo)
 - [ ] Implementação fallback (provedor de scraping) atrás de feature flag
 - [ ] Importação manual (upload de imagens + formulário)
 - [ ] Cópia de avatar/miniaturas para o bucket `ig-cache`
@@ -41,7 +43,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [ ] Proporção da grade configurável (1:1 / 3:4)
 
 ### E3 · Mídia (5 d)
-- [ ] Upload direto com URL assinada (resumível/TUS para vídeo), progresso, retry, limites (30 MB imagem, 300 MB e 90 s vídeo)
+- [ ] Upload direto com URL pré-assinada (multipart S3 para vídeo), progresso, retry, limites (30 MB imagem, 300 MB e 90 s vídeo)
 - [ ] Route Handler de processamento com `sharp` (thumb 320 c/ crop, preview 1080, HEIC)
 - [ ] Captura de capa de vídeo no navegador + escolha de frame
 - [ ] Editor de enquadramento da miniatura (`grid_crop`) com pinça/arrastar
@@ -63,7 +65,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [ ] Alternativa acessível (mover para cima/baixo)
 
 ### E6 · Aprovação (6 d)
-- [ ] Tabelas `approval_*`, função `decide_approval` (security definer), Route Handler `/api/approval/[token]/decide`, rate limit (10 decisões/min por IP e por token)
+- [ ] Tabelas `approval_*`, transação `decideApproval` com `NOTIFY`, Route Handler `/api/approval/[token]/decide`, rate limit (10 decisões/min por IP e por token)
 - [ ] Folha "Compartilhar link": escopo, título, recado, geração do token, copiar/WhatsApp/share
 - [ ] Página pública `/a/[token]` SSR com Open Graph, feed destacado, detalhe, decisões
 - [ ] `ApprovalBar`: nome do aprovador, comentário obrigatório em ajustes, "Aprovar todos"
@@ -71,17 +73,18 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 - [ ] Testes e2e Playwright: enviar → abrir link → aprovar → status atualizado
 
 ### E7 · Retorno em tempo real e histórico (2 d)
-- [ ] Supabase Realtime por perfil, toasts, invalidação do TanStack Query
+- [ ] SSE `/api/events` com `LISTEN/NOTIFY` do Postgres (fallback polling 5 s), toasts, invalidação do TanStack Query
 - [ ] Tela "Aprovações": envios, links, aberturas, decisões (data, hora, link, comentário)
 - [ ] Eventos de aprovação no `activity_log` e exibição no detalhe da publicação
 
 ### E8 · Lançamento (5 d)
 - [ ] PWA: manifest, ícones, splash, `display: standalone`, atualização de versão
+- [ ] Configurações da conta: "Excluir conta" (exigido pela política de privacidade e pela Meta) e exportação simples dos dados
 - [ ] E-mails Resend: link mágico customizado, "cliente decidiu"
 - [ ] QA em iOS Safari, Android Chrome, desktop; performance (LCP da página pública)
-- [ ] Política de privacidade e termos (necessários também para o app na Meta)
+- [ ] Revisar com advogado(a) e publicar Política de Privacidade, Termos de Uso e Instruções de exclusão de dados (rascunhos em `docs/legal/`); cadastrar as URLs no app da Meta
 - [ ] Piloto com 3 perfis reais da CPCann; ajustes
-- [ ] Produção: domínio, Supabase Pro, backups
+- [ ] Produção: subdomínio `vercel.app` (domínio próprio depois), backup do Postgres, revisão dos limites gratuitos; ao cobrar clientes, sair do Vercel Hobby
 
 ## Marcos de demonstração
 
@@ -98,6 +101,7 @@ Estimativas para **1 dev full-stack** trabalhando com Claude Code, em dias útei
 1. **Calendário completo** (visão mês/semana, arrastar entre datas).
 2. **Publicação e agendamento no Instagram** via Instagram Login do cliente + Content Publishing
    API (requer App Review na Meta e conta profissional do cliente).
+   2b. **APK / Play Store** se o PWA mostrar limitação (Capacitor ou Trusted Web Activity).
 3. Stories e destaques; informações de perfil editáveis na simulação.
 4. Comentários em thread no link e marcação na imagem.
 5. Notificações push (Web Push) e WhatsApp (API oficial).

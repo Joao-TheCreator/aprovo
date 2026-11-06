@@ -4,7 +4,7 @@ Guia para sessões do Claude Code neste repositório.
 
 ## O projeto em uma linha
 
-Web app mobile-first (Next.js + Supabase) para social medias montarem o feed do Instagram de
+Web app mobile-first (Next.js + Postgres/Drizzle + Auth.js + R2) para social medias montarem o feed do Instagram de
 clientes e colherem aprovação por link. Planejamento completo em `docs/`. Leia
 `docs/01-visao-e-escopo.md` e `docs/04-telas-e-fluxos.md` antes de implementar qualquer tela.
 
@@ -35,7 +35,10 @@ Regras:
 - Pastas: `app/(auth)`, `app/(app)/perfis` (URLs sem prefixo `/app`), `app/a/[token]`, `app/api`, `components/ui`,
   `components/feed`, `lib/<módulo>`, `db/schema`, `db/migrations`, `tests/`.
 - Validação com Zod em toda entrada (Server Actions e Route Handlers).
-- Acesso a dados via Drizzle; nunca `service_role` no cliente.
+- Acesso a dados via Drizzle, sempre filtrado por workspace (`requireWorkspaceMember`);
+  credenciais de banco e R2 só no servidor.
+- Nada preso a um fornecedor: Postgres padrão, API S3, Auth.js. Não adicionar SDKs
+  proprietários de BaaS sem decisão do João.
 - Originais de mídia são imutáveis; derivados em `previews/` e `thumbs/`; cópias do Instagram em `ig-cache/`.
 - Tokens de aprovação: nunca logar o token claro; guardar só o hash.
 - Commits: Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`), uma tarefa por commit.

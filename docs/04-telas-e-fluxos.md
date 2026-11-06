@@ -31,6 +31,8 @@ de aceite. Padrões de interação seguem o MyFeed (ver `docs/06-referencia-myfe
 - Login por e-mail (link mágico) ou Google. Primeiro acesso cria `workspace` + `member owner`.
 - Lista de perfis: avatar, @, contadores de publicações por status (ex.: "2 aguardando").
   Estado vazio leva à Tela 01.
+- Menu da conta: nome, e-mail, sair, e **Configurações › Conta › Excluir conta** (apaga a
+  conta e o conteúdo; registros de aprovação ficam anonimizados conforme `docs/legal/`).
 
 **Aceite:** novo usuário chega ao feed de um perfil em até 3 passos (login → conectar → feed).
 
