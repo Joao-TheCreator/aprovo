@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -65,6 +66,10 @@ export function PostEditor({ post }: { post: PostDetail }) {
   const isVideo = post.kind === "video";
   const ratio = post.profile.gridRatio;
   const anyNotReady = media.some((m) => m.status !== "ready") || pendingUploads.length > 0;
+  const canSend =
+    (post.status === "draft" || post.status === "changes_requested") &&
+    media.length > 0 &&
+    !anyNotReady;
   const hasProcessing = media.some((m) => m.status === "uploading" || m.status === "processing");
 
   // Poll while the backend is still processing derivatives.
@@ -376,13 +381,25 @@ export function PostEditor({ post }: { post: PostDetail }) {
             {saving ? <Loader2 aria-hidden className="animate-spin" /> : null}
             Salvar rascunho
           </Button>
-          <Button
-            className="flex-1"
-            disabled
-            title={anyNotReady ? "Aguarde o processamento das mídias" : "Disponível na Fase 4"}
-          >
-            Enviar para aprovação
-          </Button>
+          {canSend ? (
+            <Button asChild className="flex-1">
+              <Link href={`/perfis/${post.profileId}/aprovacoes/novo?posts=${post.id}`}>
+                Enviar para aprovação
+              </Link>
+            </Button>
+          ) : post.status === "pending_approval" ? (
+            <Button asChild variant="outline" className="flex-1">
+              <Link href={`/perfis/${post.profileId}/aprovacoes`}>Ver envio</Link>
+            </Button>
+          ) : (
+            <Button
+              className="flex-1"
+              disabled
+              title={anyNotReady ? "Aguarde o processamento das mídias" : "Publicação já aprovada"}
+            >
+              Enviar para aprovação
+            </Button>
+          )}
         </div>
       </div>
 

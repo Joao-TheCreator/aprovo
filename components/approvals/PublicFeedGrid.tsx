@@ -23,12 +23,7 @@ export function PublicFeedGrid({
         return (
           <li
             key={`${item.kind}-${item.id}`}
-            className={cn(
-              "relative",
-              highlighted
-                ? "ring-roxo z-10 ring-[3px] ring-inset"
-                : highlightIds.size > 0 && "opacity-60",
-            )}
+            className={cn("relative", highlighted ? "z-10" : highlightIds.size > 0 && "opacity-60")}
           >
             <GridCell
               item={item}
@@ -37,7 +32,10 @@ export function PublicFeedGrid({
               onOpen={() => highlighted && onOpen(item.id)}
             />
             {highlighted ? (
-              <span aria-hidden className="ring-roxo pointer-events-none absolute inset-0 ring-[3px] ring-inset" />
+              <span
+                aria-hidden
+                className="ring-roxo pointer-events-none absolute inset-0 ring-[3px] ring-inset"
+              />
             ) : null}
           </li>
         );

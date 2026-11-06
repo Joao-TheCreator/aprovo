@@ -136,6 +136,11 @@ export function PostDetailView({ post }: { post: PostDetail }) {
   const feedHref = `/perfis/${post.profileId}`;
   const video = post.kind === "video" ? post.media[0] : null;
   const archived = post.archivedAt !== null;
+  const approvalsHref = `/perfis/${post.profileId}/aprovacoes`;
+  const canSend =
+    (post.status === "draft" || post.status === "changes_requested") &&
+    post.media.length > 0 &&
+    post.media.every((m) => m.status === "ready");
 
   function toggleArchive() {
     startTransition(async () => {
@@ -181,12 +186,39 @@ export function PostDetailView({ post }: { post: PostDetail }) {
           <Button asChild>
             <Link href={`/perfis/${post.profileId}/posts/${post.id}/editar`}>Editar</Link>
           </Button>
-          <Button variant="secondary" disabled title="Disponível na Fase 4">
-            Enviar para aprovação
-          </Button>
-          <Button variant="outline" disabled title="Disponível na Fase 4">
-            Copiar link
-          </Button>
+          {canSend ? (
+            <Button asChild variant="secondary">
+              <Link href={`/perfis/${post.profileId}/aprovacoes/novo?posts=${post.id}`}>
+                Enviar para aprovação
+              </Link>
+            </Button>
+          ) : post.status === "pending_approval" ? (
+            <>
+              <span className="text-roxo flex min-h-11 items-center text-sm font-semibold">
+                Aguardando aprovação
+              </span>
+              <Button asChild variant="outline">
+                <Link href={approvalsHref}>Ver envio</Link>
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="secondary"
+              disabled
+              title={
+                post.status === "approved"
+                  ? "Publicação já aprovada"
+                  : "Aguarde o processamento das mídias"
+              }
+            >
+              Enviar para aprovação
+            </Button>
+          )}
+          {post.status === "pending_approval" ? (
+            <Button asChild variant="outline" title="Gere um novo link na lista de envios">
+              <Link href={approvalsHref}>Copiar link</Link>
+            </Button>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label="Mais ações"
