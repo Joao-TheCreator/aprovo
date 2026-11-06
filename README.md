@@ -20,6 +20,7 @@ automática pela Graph API está implementada e testada com fixtures, aguardando
 | [07 · API do Instagram](docs/07-instagram-api.md) | Como carregar o feed pelo @ (Business Discovery), fallbacks, publicação futura |
 | [08 · Decisões e riscos](docs/08-decisoes-e-riscos.md) | ADRs, riscos com mitigação, dependências externas a providenciar |
 | [09 · Design system](docs/09-design-system.md) | Cores, tipografia, status, componentes |
+| [10 · Deploy e Meta](docs/10-deploy-e-meta.md) | Passo a passo: Neon, R2, Resend, Google, Vercel, app na Meta e conexão da conta do Instagram |
 | [Legal](docs/legal/README.md) | Rascunhos de Política de Privacidade, Termos de Uso e Instruções de exclusão de dados (LGPD + exigências da Meta) |
 
 ## Resumo do que precisamos
