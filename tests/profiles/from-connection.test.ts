@@ -14,13 +14,16 @@ import { getProfileFeed } from "@/lib/profiles/queries";
 import { findCurrentWorkspace } from "@/lib/workspace/current";
 import { createWorkspaceForUser } from "@/lib/workspace/create";
 import { testDb } from "../setup";
-import { makeRequireMock, seedWorkspace } from "../media/helpers";
+import { seedWorkspace } from "../media/helpers";
 
 const mocks = vi.hoisted(() => ({ user: { id: "" } }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/instagram/download", () => ({ downloadImage: vi.fn(async () => null) }));
 vi.mock("@/lib/auth/require", async () => {
+  // Dynamic import: a static import of the helpers would not be initialized yet when this
+  // hoisted factory runs (queries.ts imports @/lib/auth/require before the helpers load).
+  const { makeRequireMock } = await import("../media/helpers");
   const base = await makeRequireMock(mocks);
   const { db } = await import("@/db/client");
   const { findCurrentWorkspace } = await import("@/lib/workspace/current");
