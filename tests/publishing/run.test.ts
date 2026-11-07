@@ -19,6 +19,11 @@ vi.mock("@/lib/instagram/publish", async (importOriginal) => ({
   },
 }));
 
+// The post-publication import talks to Instagram; hooks are covered in after.test.ts.
+vi.mock("@/lib/profiles/import", () => ({
+  importProfileFromProvider: vi.fn(async () => ({ ok: true as const, imported: 0 })),
+}));
+
 import { GET as runRoute } from "@/app/api/publishing/run/route";
 
 let tmp: Awaited<ReturnType<typeof makeTempStorage>>;

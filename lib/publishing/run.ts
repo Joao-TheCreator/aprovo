@@ -2,8 +2,8 @@
  * Runs one claimed publication (docs/12 sections 4.1 to 4.6). The cron route is the only caller
  * and the only writer of `published`. Never logs tokens or signed URLs.
  */
-import { and, eq, ne } from "drizzle-orm";
-import { db, type Database } from "@/db/client";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db/client";
 import { instagramConnections, posts, publications, type InstagramConnection } from "@/db/schema";
 import { logActivity } from "@/lib/activity/log";
 import { canPublish } from "@/lib/instagram/oauth";
@@ -13,9 +13,15 @@ import {
   type PublishError,
   type PublishErrorCode,
 } from "@/lib/instagram/publish-errors";
-import type { PostStatus } from "@/lib/profiles/contracts";
 import { notifyEvent } from "@/lib/realtime/notify";
+import { onFailed, onPublished } from "./after";
 import { isDefinitive, nextAttemptAt } from "./backoff";
+import {
+  failPost,
+  failPublicationsForConnection,
+  isAccountErrorCode,
+  notifyConnectionLost,
+} from "./connection-loss";
 import {
   PUBLICATION_ERROR_MESSAGES,
   PublishValidationError,
@@ -24,9 +30,6 @@ import {
 import { logInfo, logWarn } from "./logger";
 import { preparePostMedia } from "./prepare";
 import { release, type PublicationRow, type ReleaseOutcome } from "./queue";
-import { InvalidTransitionError, nextPostStatus } from "./state";
-
-type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /** A container older than this is not reused (docs/12 section 3, expires in 24 h). [confirmar] */
 const CONTAINER_MAX_AGE_MS = 24 * 3600 * 1000;
@@ -40,12 +43,6 @@ const SCHEDULER_ACTOR = "system:scheduler" as const;
 
 export const CONNECTION_DOWN_MESSAGE = "Conecte o Instagram novamente para publicar.";
 
-/** Account-level failures: the connection itself is unusable (docs/12 section 7). */
-const ACCOUNT_CODES: ReadonlySet<PublishErrorCode> = new Set<PublishErrorCode>([
-  "token_expired",
-  "not_professional",
-  "missing_scope",
-]);
 const CONNECTION_STATUS_FOR: Partial<Record<PublishErrorCode, InstagramConnection["status"]>> = {
   token_expired: "expired",
   not_professional: "not_professional",
@@ -53,17 +50,10 @@ const CONNECTION_STATUS_FOR: Partial<Record<PublishErrorCode, InstagramConnectio
 };
 
 /**
- * Post-publication hooks. T9 replaces the bodies (e-mail, feed refresh); until then they are
- * no-ops. Failures inside a hook never change the outcome.
+ * Post-publication hooks (e-mail, feed import). Failures inside a hook never change the outcome.
+ * An object so tests can spy on the calls.
  */
-export const afterHooks = {
-  onPublished: async (job: PublicationRow): Promise<void> => {
-    void job;
-  },
-  onFailed: async (job: PublicationRow): Promise<void> => {
-    void job;
-  },
-};
+export const afterHooks = { onPublished, onFailed };
 
 export type RunOutcome = {
   kind: "published" | "retried" | "failed" | "skipped";
@@ -203,7 +193,22 @@ export async function runPublication(job: PublicationRow, deps: RunDeps): Promis
   const result = await recordOutcome(job, released, decision, durationMs, clock);
   if (result.published) await runHook("onPublished", released);
   for (const row of result.failed) await runHook("onFailed", row);
+  if (result.connectionId) await notifyLoss(result.connectionId, result.failed.length);
   return { kind: outcomeName, code };
+}
+
+/** One e-mail per lost connection, not one per publication. Never throws. */
+async function notifyLoss(connectionId: string, affected: number): Promise<void> {
+  try {
+    const [c] = await db
+      .select()
+      .from(instagramConnections)
+      .where(eq(instagramConnections.id, connectionId))
+      .limit(1);
+    if (c) await notifyConnectionLost(c, affected);
+  } catch {
+    logWarn("publication_hook_failed", { connection_id: connectionId, detail: "connection_lost" });
+  }
 }
 
 async function runHook(name: keyof typeof afterHooks, row: PublicationRow): Promise<void> {
@@ -464,9 +469,10 @@ async function recordOutcome(
   decision: Decision,
   durationMs: number,
   clock: () => Date,
-): Promise<{ published: boolean; failed: PublicationRow[] }> {
+): Promise<{ published: boolean; failed: PublicationRow[]; connectionId: string | null }> {
   const out = decision.outcome;
   const failedRows: PublicationRow[] = [];
+  let lostConnectionId: string | null = null;
   const profileId = job.profileId;
 
   await db.transaction(async (tx) => {
@@ -514,11 +520,11 @@ async function recordOutcome(
 
     if (out.kind !== "failed") return;
 
-    await failPost(tx, released, out.code, out.message, clock);
+    await failPost(tx, released, out.code, out.message, SCHEDULER_ACTOR, clock());
     failedRows.push(released);
 
     // docs/12 section 7: a dead connection fails every other live publication at once.
-    if (ACCOUNT_CODES.has(out.code) && job.connectionId) {
+    if (isAccountErrorCode(out.code) && job.connectionId) {
       const status = CONNECTION_STATUS_FOR[out.code];
       if (status && decision.fromMeta) {
         await tx
@@ -526,65 +532,20 @@ async function recordOutcome(
           .set({ status, statusDetail: out.message, statusCheckedAt: clock() })
           .where(eq(instagramConnections.id, job.connectionId));
       }
-      const siblings = await tx
-        .update(publications)
-        .set({
-          status: "failed",
-          lastErrorCode: out.code,
-          lastError: out.message,
-          lastErrorRaw: null,
-          lockedAt: null,
-          lockedBy: null,
-        })
-        .where(
-          and(
-            eq(publications.connectionId, job.connectionId),
-            eq(publications.status, "scheduled"),
-            ne(publications.id, job.id),
-          ),
-        )
-        .returning();
-      for (const sibling of siblings) {
-        await failPost(tx, sibling, out.code, out.message, clock);
-        failedRows.push(sibling);
-      }
+      const siblings = await failPublicationsForConnection(
+        job.connectionId,
+        out.code,
+        SCHEDULER_ACTOR,
+        { tx, exceptId: job.id, message: out.message, now: clock },
+      );
+      failedRows.push(...siblings);
+      lostConnectionId = job.connectionId;
     }
   });
 
-  return { published: out.kind === "published", failed: failedRows };
-}
-
-async function failPost(
-  tx: Tx,
-  row: PublicationRow,
-  code: PublishErrorCode,
-  message: string,
-  clock: () => Date,
-): Promise<void> {
-  const [post] = await tx.select().from(posts).where(eq(posts.id, row.postId)).limit(1);
-  let status: PostStatus | null = null;
-  if (post) {
-    try {
-      status = nextPostStatus(post.status, "publish_failed");
-    } catch (err) {
-      if (!(err instanceof InvalidTransitionError)) throw err;
-    }
-  }
-  if (status) await tx.update(posts).set({ status }).where(eq(posts.id, row.postId));
-  await logActivity(tx, {
-    profileId: row.profileId,
-    actor: SCHEDULER_ACTOR,
-    event: "publication.failed",
-    payload: { publicationId: row.id, postId: row.postId, code, message },
-  });
-  if (status) {
-    await notifyEvent(tx, {
-      type: "post.status",
-      profileId: row.profileId,
-      postId: row.postId,
-      status,
-      decision: null,
-      at: clock().toISOString(),
-    });
-  }
+  return {
+    published: out.kind === "published",
+    failed: failedRows,
+    connectionId: lostConnectionId,
+  };
 }

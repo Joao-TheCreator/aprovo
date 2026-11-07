@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { instagramConnections } from "@/db/schema";
 import { parseSignedRequest } from "@/lib/instagram/signed-request";
+import { handleConnectionLoss } from "@/lib/publishing/connection-loss";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,14 @@ export async function POST(req: NextRequest) {
       statusCheckedAt: new Date(),
     })
     .where(eq(instagramConnections.igUserId, parsed.userId))
-    .returning({ id: instagramConnections.id });
+    .returning({
+      id: instagramConnections.id,
+      username: instagramConnections.username,
+      status: instagramConnections.status,
+      connectedBy: instagramConnections.connectedBy,
+    });
+  // Scheduled publications of a revoked connection cannot run: fail them now (docs/12 section 7).
+  for (const row of rows) await handleConnectionLoss(row, "system:deauthorize");
   console.info(`[instagram] deauthorized connections=${rows.length}`);
   return NextResponse.json({ ok: true });
 }

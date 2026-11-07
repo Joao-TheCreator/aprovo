@@ -23,7 +23,12 @@ export function LiveUpdates({
       const who = event.decision?.approverName?.trim() || "O cliente";
       const caption = captions?.[event.postId];
       const target = caption ? `'${shortCaption(caption, 30)}'` : "uma publicação";
-      if (event.decision?.decision === "approved") toast.success(`${who} aprovou ${target}`);
+      if (event.status === "published") {
+        toast.success(`Publicado no Instagram: ${target}`);
+      } else if (event.status === "publish_failed") {
+        // The event carries no error text (lib/realtime/events.ts is owned by T10): generic message.
+        toast.error(`Não foi possível publicar ${target}. Veja o motivo na lista de agendadas.`);
+      } else if (event.decision?.decision === "approved") toast.success(`${who} aprovou ${target}`);
       else if (event.decision?.decision === "changes_requested")
         toast.info(`${who} pediu ajustes em ${target}`);
       router.refresh();

@@ -105,6 +105,9 @@ export type ProfileFeed = {
     gridRatio: GridRatio;
     /** Linked Instagram connection; null on manual profiles and after a disconnect. */
     connectionId: string | null;
+    /** Health of the linked connection; null without one. Absent in the public approval view. */
+    connectionStatus?:
+      "active" | "expired" | "missing_scope" | "not_professional" | "revoked" | null;
   };
   items: FeedItem[];
   /** True when the Graph API is configured on the server (controls the "Atualizar feed" button). */

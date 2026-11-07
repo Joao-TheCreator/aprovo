@@ -13,6 +13,7 @@ import {
   type InstagramConnection,
 } from "@/db/schema";
 import { decrypt, encrypt } from "@/lib/crypto/secretbox";
+import { handleConnectionLoss } from "@/lib/publishing/connection-loss";
 import { classifyGraphError, stripTokens } from "./errors";
 
 export const IG_AUTHORIZE_URL = "https://www.instagram.com/oauth/authorize";
@@ -481,10 +482,16 @@ export async function checkConnectionHealth(
       .returning();
     return row ?? connection;
   };
+  /** Saves a non-active status and fails the scheduled publications of the connection at once. */
+  const saveLost = async (patch: Partial<typeof instagramConnections.$inferInsert>) => {
+    const row = await save(patch);
+    await handleConnectionLoss(row, "system:health");
+    return row;
+  };
 
   // Expired by date: no need to ask Meta.
   if (connection.tokenExpiresAt.getTime() < Date.now()) {
-    return save({ status: "expired", statusDetail: "Token expirado" });
+    return saveLost({ status: "expired", statusDetail: "Token expirado" });
   }
 
   const url =
@@ -531,11 +538,11 @@ export async function checkConnectionHealth(
   const detail = stripTokens(err.message);
   switch (err.code) {
     case "token_expired":
-      return save({ status: "expired", statusDetail: detail });
+      return saveLost({ status: "expired", statusDetail: detail });
     case "missing_scope":
-      return save({ status: "missing_scope", statusDetail: detail });
+      return saveLost({ status: "missing_scope", statusDetail: detail });
     case "not_professional":
-      return save({ status: "not_professional", statusDetail: detail });
+      return saveLost({ status: "not_professional", statusDetail: detail });
     default:
       // rate_limited / network / unknown: keep the previous status.
       return save({ statusDetail: detail });

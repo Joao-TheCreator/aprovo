@@ -1,7 +1,14 @@
 /** Auth-free feed builder. Callers MUST authorize (member check or valid approval link) first. */
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { importedPosts, mediaAssets, postMedia, posts, profiles } from "@/db/schema";
+import {
+  importedPosts,
+  instagramConnections,
+  mediaAssets,
+  postMedia,
+  posts,
+  profiles,
+} from "@/db/schema";
 import { isGraphConfiguredForWorkspace } from "@/lib/instagram";
 import { getStorage } from "@/lib/storage";
 import type { FeedItem, GridCrop, ProfileFeed } from "./contracts";
@@ -27,6 +34,14 @@ export async function buildProfileFeed(profileId: string): Promise<ProfileFeed |
   const [p] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!p) return null;
 
+  const [connection] = p.connectionId
+    ? await db
+        .select({ status: instagramConnections.status })
+        .from(instagramConnections)
+        .where(eq(instagramConnections.id, p.connectionId))
+        .limit(1)
+    : [];
+
   const [avatarRow] = p.avatarAssetId
     ? await db
         .select({ thumbPath: mediaAssets.thumbPath })
@@ -35,11 +50,27 @@ export async function buildProfileFeed(profileId: string): Promise<ProfileFeed |
         .limit(1)
     : [];
 
-  const planned = await db
-    .select()
-    .from(posts)
-    .where(and(eq(posts.profileId, profileId), isNull(posts.archivedAt)))
-    .orderBy(asc(posts.position));
+  const imported = await db
+    .select({ post: importedPosts, thumbPath: mediaAssets.thumbPath })
+    .from(importedPosts)
+    .leftJoin(mediaAssets, eq(mediaAssets.id, importedPosts.thumbAssetId))
+    .where(eq(importedPosts.profileId, profileId))
+    .orderBy(sql`${importedPosts.publishedAt} desc nulls last`, desc(importedPosts.createdAt));
+
+  // A published post that already came back through the import (same `ig_media_id`) lives in the
+  // imported part of the grid; showing it here too would duplicate it. Until the import lands it
+  // stays planned with the "Publicada" pill (docs/12 section 4.6).
+  const importedMediaIds = new Set(imported.map((r) => r.post.igMediaId));
+  const planned = (
+    await db
+      .select()
+      .from(posts)
+      .where(and(eq(posts.profileId, profileId), isNull(posts.archivedAt)))
+      .orderBy(asc(posts.position))
+  ).filter(
+    (x) =>
+      !(x.status === "published" && x.publishedMediaId && importedMediaIds.has(x.publishedMediaId)),
+  );
   const firstMedia = planned.length
     ? await db
         .select({
@@ -74,13 +105,6 @@ export async function buildProfileFeed(profileId: string): Promise<ProfileFeed |
         gridCrop: m.gridCrop ?? null,
       });
   }
-
-  const imported = await db
-    .select({ post: importedPosts, thumbPath: mediaAssets.thumbPath })
-    .from(importedPosts)
-    .leftJoin(mediaAssets, eq(mediaAssets.id, importedPosts.thumbAssetId))
-    .where(eq(importedPosts.profileId, profileId))
-    .orderBy(sql`${importedPosts.publishedAt} desc nulls last`, desc(importedPosts.createdAt));
 
   const urls = await signedUrls([
     avatarRow?.thumbPath,
@@ -139,6 +163,7 @@ export async function buildProfileFeed(profileId: string): Promise<ProfileFeed |
       lastImportedAt: p.lastImportedAt,
       gridRatio: p.gridRatio,
       connectionId: p.connectionId,
+      connectionStatus: connection?.status ?? null,
     },
     items,
     canRefresh: await isGraphConfiguredForWorkspace(p.workspaceId),

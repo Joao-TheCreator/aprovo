@@ -17,8 +17,10 @@ import {
   PUBLISH_SCOPE,
 } from "@/lib/instagram/oauth";
 import { getPublishingQuota } from "@/lib/publishing/actions";
+import { countRescheduleableFailures } from "@/lib/publishing/connection-loss";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import { DisconnectButton } from "./DisconnectButton";
+import { RescheduleFailedButton } from "./RescheduleFailedButton";
 
 export const metadata = { title: "Configurações" };
 export const dynamic = "force-dynamic";
@@ -82,7 +84,7 @@ export default async function ConfiguracoesPage({
     : [];
   const profileByConnection = new Map(linked.map((p) => [p.connectionId, p.id]));
   // Daily publishing quota per publish-capable account (cached 10 min; null when unavailable).
-  // TODO(T9): "Avisar por e-mail quando publicar" toggle lives here once the e-mail template exists.
+  // TODO(T13?): "Avisar por e-mail quando publicar" toggle (needs `workspaces.notify_on_publish`).
   const quotaByConnection = new Map(
     await Promise.all(
       connections.map(async (c) => {
@@ -94,6 +96,10 @@ export default async function ConfiguracoesPage({
         return [c.id, quota] as const;
       }),
     ),
+  );
+  // Publications that failed while the account was disconnected (offer "Reagendar" once active).
+  const failedByConnection = await countRescheduleableFailures(
+    connections.filter((c) => c.status === "active").map((c) => c.id),
   );
   const configured = isOAuthConfigured();
   const publishEnabled = instagramScopes().includes(PUBLISH_SCOPE);
@@ -130,6 +136,7 @@ export default async function ConfiguracoesPage({
                 const publishGranted = canPublish(c);
                 const statusText = statusMessage(c);
                 const quota = quotaByConnection.get(c.id) ?? null;
+                const failedCount = failedByConnection.get(c.id) ?? 0;
                 const legacy = c.provider === "instagram" && activeProvider === "facebook";
                 return (
                   <li
@@ -177,6 +184,9 @@ export default async function ConfiguracoesPage({
                         Esta conexão usa o Login do Instagram. Este servidor está configurado para o
                         Login do Facebook; reconecte para usar o mesmo login.
                       </p>
+                    ) : null}
+                    {failedCount > 0 ? (
+                      <RescheduleFailedButton connectionId={c.id} count={failedCount} />
                     ) : null}
                     <div className="flex flex-wrap gap-3">
                       <Button asChild variant="secondary">
