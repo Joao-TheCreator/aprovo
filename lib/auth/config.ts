@@ -13,6 +13,16 @@ export const authConfig = {
     Resend({
       apiKey: process.env.RESEND_API_KEY,
       from: process.env.EMAIL_FROM ?? "APROVO <onboarding@resend.dev>",
+      // Only the look changes (docs/14 area D): same Resend call, our dark template.
+      async sendVerificationRequest({ identifier, url, provider }) {
+        const { sendMagicLinkEmail } = await import("@/lib/email/send");
+        await sendMagicLinkEmail({
+          to: identifier,
+          url,
+          apiKey: provider.apiKey,
+          from: provider.from,
+        });
+      },
     }),
     ...(googleEnabled ? [Google] : []),
   ],

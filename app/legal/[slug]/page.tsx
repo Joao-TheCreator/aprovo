@@ -26,7 +26,7 @@ export default async function LegalPage({ params }: { params: Promise<{ slug: st
   return (
     <LegalShell current={slug} draft={doc.draft}>
       <div
-        className="[&_a]:text-primary [&_blockquote]:border-border [&_blockquote]:text-muted-foreground [&_a]:underline [&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_h1]:mb-4 [&_h1]:text-3xl [&_h1]:leading-9 [&_h1]:font-bold [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_p]:leading-7 [&_table]:my-4 [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6"
+        className="text-foreground [&_a]:text-brand-ink [&_blockquote]:border-brand-ink [&_blockquote]:text-muted-foreground [&_h1]:font-display [&_h1]:text-h1 [&_h2]:font-display [&_h2]:text-h2 [&_th]:bg-surface-2 [&_td]:border-border [&_th]:border-border [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_strong]:text-foreground [&_h3]:text-title [&_hr]:border-border [&_code]:bg-surface-2 [&_a]:underline [&_a]:underline-offset-4 [&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_code]:rounded-md [&_code]:px-1.5 [&_h1]:mb-6 [&_h2]:mt-10 [&_h2]:mb-3 [&_h3]:mt-6 [&_h3]:mb-2 [&_hr]:my-8 [&_li]:my-1 [&_li]:leading-7 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_p]:text-base [&_p]:leading-7 [&_table]:my-4 [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_th]:text-left [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6"
         dangerouslySetInnerHTML={{ __html: doc.html }}
       />
     </LegalShell>

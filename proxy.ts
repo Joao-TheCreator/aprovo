@@ -18,6 +18,7 @@ const PUBLIC = [
   /^\/api\/auth(\/|$)/,
   /^\/api\/files\//, // local storage driver (signed URLs)
   /^\/manifest\.webmanifest$/,
+  /^\/opengraph-image/, // OG image for link previews (crawlers are anonymous)
   /^\/icons\//,
   /^\/brand\//,
   /^\/favicon\.ico$/,

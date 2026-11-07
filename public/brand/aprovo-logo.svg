@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 794 346" width="794" height="346" role="img" aria-label="APROVO">
+  <defs>
+    <linearGradient id="aprovo-check" x1="491" y1="258" x2="663" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6CF51C"/>
+      <stop offset="1" stop-color="#19F000"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="#3D028A" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke-width="36">
+      <circle cx="87" cy="196" r="46"/>
+      <path d="M137 150V243"/>
+      <circle cx="225" cy="196" r="46"/>
+      <path d="M180 150V287"/>
+      <path d="M313 242V194A44 44 0 0 1 357 150"/>
+      <circle cx="427" cy="196" r="46"/>
+      <circle cx="706" cy="196" r="46"/>
+    </g>
+    <g stroke-width="19">
+      <path d="M653 33L667 67"/>
+      <path d="M687 84L718 56"/>
+      <path d="M703 111L739 101"/>
+    </g>
+  </g>
+  <path d="M513 168L561 236L641 116" fill="none" stroke="url(#aprovo-check)" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M233 316Q410 268 587 303" fill="none" stroke="#5DF20A" stroke-width="13" stroke-linecap="round"/>
+</svg>

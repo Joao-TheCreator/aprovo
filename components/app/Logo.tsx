@@ -3,8 +3,8 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 /**
- * Wordmark. Two rasters: the original (purple wordmark) for light surfaces and
- * `aprovo-logo-dark.png` (off-white wordmark, same green check) for dark ones; CSS picks one
+ * Wordmark. Two vectors (same 794x346 viewBox): the purple wordmark for light surfaces and
+ * `aprovo-logo-dark.svg` (off-white wordmark, same green check) for dark ones; CSS picks one
  * via the `dark:` variant, so it follows the theme without JS.
  */
 export function Logo({ className, height = 28 }: { className?: string; height?: number }) {
@@ -12,7 +12,7 @@ export function Logo({ className, height = 28 }: { className?: string; height?: 
   return (
     <>
       <Image
-        src="/brand/aprovo-logo.png"
+        src="/brand/aprovo-logo.svg"
         alt="APROVO"
         width={width}
         height={height}
@@ -21,7 +21,7 @@ export function Logo({ className, height = 28 }: { className?: string; height?: 
         style={{ height }}
       />
       <Image
-        src="/brand/aprovo-logo-dark.png"
+        src="/brand/aprovo-logo-dark.svg"
         alt="APROVO"
         width={width}
         height={height}

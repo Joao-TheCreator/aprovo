@@ -1,11 +1,55 @@
 import { Resend } from "resend";
+import {
+  connectionLostEmail,
+  decisionEmail,
+  magicLinkEmail,
+  publishFailedEmail,
+  publishedEmail,
+  type ConnectionLostTemplateReason,
+  type RenderedEmail,
+} from "./templates";
 
-function esc(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+const DEFAULT_FROM = "Aprovo <onboarding@resend.dev>";
+
+async function deliver(to: string, email: RenderedEmail): Promise<void> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !to) return;
+  const resend = new Resend(key);
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM ?? DEFAULT_FROM,
+    to,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+  });
+}
+
+export type MagicLinkEmailInput = {
+  to: string;
+  /** Auth.js callback URL with the verification token. Never logged. */
+  url: string;
+  /** Provider config (lib/auth/config.ts); falls back to the env. */
+  apiKey?: string;
+  from?: string;
+};
+
+/**
+ * Login link (Auth.js `sendVerificationRequest`). Unlike the notification e-mails this one
+ * THROWS on failure, so Auth.js redirects to /entrar?error=EmailSignin.
+ */
+export async function sendMagicLinkEmail(input: MagicLinkEmailInput): Promise<void> {
+  const key = input.apiKey ?? process.env.RESEND_API_KEY;
+  if (!key) throw new Error("RESEND_API_KEY is not set; cannot send the sign-in e-mail");
+  const email = magicLinkEmail({ url: input.url });
+  const resend = new Resend(key);
+  const { error } = await resend.emails.send({
+    from: input.from ?? process.env.EMAIL_FROM ?? DEFAULT_FROM,
+    to: input.to,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
 }
 
 export type DecisionEmailInput = {
@@ -22,43 +66,11 @@ export type DecisionEmailInput = {
 /** Best-effort: skips silently without RESEND_API_KEY and never throws. */
 export async function sendDecisionEmail(input: DecisionEmailInput): Promise<void> {
   try {
-    const key = process.env.RESEND_API_KEY;
-    if (!key || !input.to) return;
-    const who = input.approverName?.trim() || "O cliente";
-    const title = (input.postCaption ?? "").trim().slice(0, 60) || "Publicação sem legenda";
-    const approved = input.decision === "approved";
-    const subject = `${who} ${approved ? "aprovou" : "pediu ajustes em"} '${title}' (@${input.profileUsername})`;
-    const comment = !approved && input.comment ? `: ${input.comment}` : "";
-    const html =
-      `<p>${esc(who)} ${approved ? "aprovou" : "pediu ajustes"} ` +
-      `'${esc(title)}' (@${esc(input.profileUsername)})${esc(comment)}</p>` +
-      `<p><a href="${esc(input.url)}">Abrir a publicação</a></p>`;
-    const resend = new Resend(key);
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM ?? "Aprovo <onboarding@resend.dev>",
-      to: input.to,
-      subject,
-      html,
-    });
+    if (!process.env.RESEND_API_KEY || !input.to) return;
+    await deliver(input.to, decisionEmail(input));
   } catch (e) {
     console.warn("[email] decision e-mail failed:", e instanceof Error ? e.message : e);
   }
-}
-
-function captionTitle(caption: string | null): string {
-  return (caption ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "Publicação sem legenda";
-}
-
-async function deliver(to: string, subject: string, html: string): Promise<void> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key || !to) return;
-  const resend = new Resend(key);
-  await resend.emails.send({
-    from: process.env.EMAIL_FROM ?? "Aprovo <onboarding@resend.dev>",
-    to,
-    subject,
-    html,
-  });
 }
 
 export type PublishedEmailInput = {
@@ -73,20 +85,7 @@ export type PublishedEmailInput = {
 /** "Publicado no Instagram". Best-effort: skips silently without RESEND_API_KEY and never throws. */
 export async function sendPublishedEmail(input: PublishedEmailInput): Promise<void> {
   try {
-    const title = captionTitle(input.postCaption);
-    const when = new Intl.DateTimeFormat("pt-BR", {
-      dateStyle: "short",
-      timeStyle: "short",
-      timeZone: "America/Sao_Paulo",
-    }).format(input.publishedAt);
-    const link = input.permalink?.startsWith("https://")
-      ? `<p><a href="${esc(input.permalink)}">Ver no Instagram</a></p>`
-      : "";
-    await deliver(
-      input.to,
-      `Publicado no Instagram: '${title}' (@${input.profileUsername})`,
-      `<p>'${esc(title)}' foi publicado no Instagram de @${esc(input.profileUsername)} em ${esc(when)}.</p>${link}`,
-    );
+    await deliver(input.to, publishedEmail(input));
   } catch (e) {
     console.warn("[email] published e-mail failed:", e instanceof Error ? e.message : e);
   }
@@ -105,21 +104,13 @@ export type PublishFailedEmailInput = {
 /** "Não foi possível publicar". Best-effort, never throws. */
 export async function sendPublishFailedEmail(input: PublishFailedEmailInput): Promise<void> {
   try {
-    const title = captionTitle(input.postCaption);
-    const reason = input.reason?.trim() || "Tente novamente ou fale com o suporte.";
-    await deliver(
-      input.to,
-      `Não foi possível publicar '${title}' (@${input.profileUsername})`,
-      `<p>Não foi possível publicar '${esc(title)}' no Instagram de @${esc(input.profileUsername)}.</p>` +
-        `<p>${esc(reason)}</p>` +
-        `<p><a href="${esc(input.url)}">Abrir a publicação</a></p>`,
-    );
+    await deliver(input.to, publishFailedEmail(input));
   } catch (e) {
     console.warn("[email] publish-failed e-mail failed:", e instanceof Error ? e.message : e);
   }
 }
 
-export type ConnectionLostReason = "expired" | "missing_scope" | "not_professional" | "revoked";
+export type ConnectionLostReason = ConnectionLostTemplateReason;
 
 export type ConnectionLostEmailInput = {
   to: string;
@@ -131,34 +122,10 @@ export type ConnectionLostEmailInput = {
   url: string;
 };
 
-function connectionLostText(reason: ConnectionLostReason, username: string): string {
-  switch (reason) {
-    case "missing_scope":
-      return "Reconecte e autorize 'Publicar conteúdo'.";
-    case "not_professional":
-      return `A conta @${username} deixou de ser profissional. Mude para Criador ou Empresa e reconecte.`;
-    case "revoked":
-      return `O acesso do APROVO a @${username} foi revogado no Instagram. Reconecte para voltar a publicar.`;
-    default:
-      return `O Instagram @${username} desconectou. Reconecte para continuar publicando.`;
-  }
-}
-
 /** "O Instagram @x desconectou": one e-mail per connection, not per publication. Never throws. */
 export async function sendConnectionLostEmail(input: ConnectionLostEmailInput): Promise<void> {
   try {
-    const count =
-      input.affected === 1
-        ? "1 publicação agendada não pôde ser publicada"
-        : `${input.affected} publicações agendadas não puderam ser publicadas`;
-    await deliver(
-      input.to,
-      `O Instagram @${input.username} desconectou`,
-      `<p>${esc(connectionLostText(input.reason, input.username))}</p>` +
-        `<p>${esc(count)} e ${input.affected === 1 ? "foi marcada" : "foram marcadas"} como falha. ` +
-        `Depois de reconectar, você pode reagendar em um toque.</p>` +
-        `<p><a href="${esc(input.url)}">Abrir Configurações</a></p>`,
-    );
+    await deliver(input.to, connectionLostEmail(input));
   } catch (e) {
     console.warn("[email] connection-lost e-mail failed:", e instanceof Error ? e.message : e);
   }

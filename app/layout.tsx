@@ -21,6 +21,7 @@ const ui = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL((process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "")),
   title: "APROVO",
   description: "Planeje. Aprove. Publique.",
   manifest: "/manifest.webmanifest",
