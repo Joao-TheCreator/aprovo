@@ -1,6 +1,16 @@
 import { asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { activityLog, mediaAssets, postMedia, posts, publications } from "@/db/schema";
+import {
+  activityLog,
+  approvalDecisions,
+  approvalItems,
+  approvalLinks,
+  approvalRequests,
+  mediaAssets,
+  postMedia,
+  posts,
+  publications,
+} from "@/db/schema";
 import { testDb } from "../setup";
 import { makeRequireMock, seedWorkspace } from "../media/helpers";
 
@@ -149,6 +159,44 @@ describe("posts actions", () => {
     expect(detail?.media.map((m) => m.assetId)).toEqual([c, b]);
     expect(detail?.profile.igUsername).toBe("cliente");
     expect(detail?.media[1].gridCrop).toEqual(crop);
+  });
+
+  it("deleting a post with a client decision archives it instead (audit rows are kept)", async () => {
+    const { profile, mk } = await seed();
+    const r = await createPost({ profileId: profile.id, kind: "post", assetIds: [await mk()] });
+    if (!r.ok) throw new Error("x");
+    const id = r.data.postId;
+    const [req] = await testDb
+      .insert(approvalRequests)
+      .values({ profileId: profile.id, status: "decided" })
+      .returning({ id: approvalRequests.id });
+    await testDb.insert(approvalItems).values({ requestId: req.id, postId: id });
+    const [link] = await testDb
+      .insert(approvalLinks)
+      .values({
+        requestId: req.id,
+        tokenHash: "h".repeat(64),
+        recipientName: "Carlos",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      })
+      .returning({ id: approvalLinks.id });
+    await testDb.insert(approvalDecisions).values({
+      requestId: req.id,
+      postId: id,
+      linkId: link.id,
+      decision: "approved",
+      approverName: "Carlos",
+    });
+
+    const res = await deletePost(id);
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error("x");
+    expect(res.data).toEqual({ deleted: [], archived: [id] });
+    const [row] = await testDb.select().from(posts).where(eq(posts.id, id));
+    expect(row.archivedAt).not.toBeNull();
+    expect(await testDb.select().from(approvalDecisions)).toHaveLength(1);
+    expect(await events(profile.id)).toContain("post.archived");
+    expect(await events(profile.id)).not.toContain("post.deleted");
   });
 
   it("archives, unarchives and deletes", async () => {

@@ -4,7 +4,7 @@ import { and, eq, inArray, isNull, min, notInArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { mediaAssets, postMedia, posts, publications } from "@/db/schema";
+import { approvalDecisions, mediaAssets, postMedia, posts, publications } from "@/db/schema";
 import { requireWorkspaceForProfile } from "@/lib/auth/require";
 import { logActivity } from "@/lib/activity/log";
 import type { ActionResult } from "@/lib/profiles/contracts";
@@ -300,22 +300,83 @@ export async function archivePost(postId: string, archived: boolean): Promise<Ac
 }
 
 /** Deletes the post (post_media cascades). Storage objects are kept: assets may be shared/dedup'd. */
-export async function deletePost(postId: string): Promise<ActionResult> {
+export type DeleteOutcome = { deleted: string[]; archived: string[] };
+
+/**
+ * Posts with a recorded client decision are the proof of the approval (audit table, no cascade),
+ * so they cannot be hard-deleted: they are archived instead and the caller tells the user.
+ */
+async function postsWithDecisions(postIds: string[]): Promise<Set<string>> {
+  if (postIds.length === 0) return new Set();
+  const rows = await db
+    .selectDistinct({ postId: approvalDecisions.postId })
+    .from(approvalDecisions)
+    .where(inArray(approvalDecisions.postId, postIds));
+  return new Set(rows.map((r) => r.postId));
+}
+
+type DeletableRow = { id: string; profileId: string; caption: string | null };
+
+async function deleteOrArchive(rows: DeletableRow[], actorUserId: string): Promise<DeleteOutcome> {
+  const decided = await postsWithDecisions(rows.map((r) => r.id));
+  const toDelete = rows.filter((r) => !decided.has(r.id));
+  const toArchive = rows.filter((r) => decided.has(r.id));
+  const actor = `user:${actorUserId}` as const;
+  await db.transaction(async (tx) => {
+    if (toDelete.length) {
+      await tx.delete(posts).where(
+        inArray(
+          posts.id,
+          toDelete.map((r) => r.id),
+        ),
+      );
+      for (const r of toDelete) {
+        await logActivity(tx, {
+          profileId: r.profileId,
+          actor,
+          event: "post.deleted",
+          payload: { postId: r.id, caption: r.caption?.slice(0, 80) ?? null },
+        });
+      }
+    }
+    if (toArchive.length) {
+      const now = new Date();
+      await tx
+        .update(posts)
+        .set({ archivedAt: now, updatedAt: now })
+        .where(
+          and(
+            inArray(
+              posts.id,
+              toArchive.map((r) => r.id),
+            ),
+            isNull(posts.archivedAt),
+          ),
+        );
+      for (const r of toArchive) {
+        await logActivity(tx, {
+          profileId: r.profileId,
+          actor,
+          event: "post.archived",
+          payload: { postId: r.id, reason: "delete_with_decisions" },
+        });
+      }
+    }
+  });
+  return { deleted: toDelete.map((r) => r.id), archived: toArchive.map((r) => r.id) };
+}
+
+export async function deletePost(postId: string): Promise<ActionResult<DeleteOutcome>> {
   const loaded = await loadPost(postId);
   if (!loaded) return fail("not_found");
   const { post, member } = loaded;
   if (!canEditPost(post.status)) return fail("published_locked");
-  await db.transaction(async (tx) => {
-    await tx.delete(posts).where(eq(posts.id, postId));
-    await logActivity(tx, {
-      profileId: post.profileId,
-      actor: `user:${member.user.id}`,
-      event: "post.deleted",
-      payload: { postId, caption: post.caption?.slice(0, 80) ?? null },
-    });
-  });
+  const outcome = await deleteOrArchive(
+    [{ id: post.id, profileId: post.profileId, caption: post.caption }],
+    member.user.id,
+  );
   revalidate(post.profileId, postId);
-  return OK;
+  return { ok: true, data: outcome };
 }
 
 const uuidList = z.array(z.string().uuid()).min(1).max(200);
@@ -424,27 +485,15 @@ export async function bulkArchivePosts(
   return OK;
 }
 
-export async function bulkDeletePosts(postIds: string[]): Promise<ActionResult> {
+export async function bulkDeletePosts(postIds: string[]): Promise<ActionResult<DeleteOutcome>> {
   const loaded = await loadBulk(postIds);
   if (!loaded) return fail("not_found");
   const { rows, member, profileId } = loaded;
   if (rows.some((r) => !canEditPost(r.status))) return fail("published_locked");
-  await db.transaction(async (tx) => {
-    await tx.delete(posts).where(
-      inArray(
-        posts.id,
-        rows.map((r) => r.id),
-      ),
-    );
-    for (const r of rows) {
-      await logActivity(tx, {
-        profileId,
-        actor: `user:${member.user.id}`,
-        event: "post.deleted",
-        payload: { postId: r.id, caption: r.caption?.slice(0, 80) ?? null },
-      });
-    }
-  });
+  const outcome = await deleteOrArchive(
+    rows.map((r) => ({ id: r.id, profileId, caption: r.caption })),
+    member.user.id,
+  );
   revalidatePath(`/perfis/${profileId}`);
-  return OK;
+  return { ok: true, data: outcome };
 }

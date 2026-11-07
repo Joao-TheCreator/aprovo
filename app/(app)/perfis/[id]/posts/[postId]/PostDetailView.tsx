@@ -216,7 +216,13 @@ export function PostDetailView({
     startTransition(async () => {
       const res = await deletePost(post.id);
       if (res.ok) {
-        toast.success("Publicação excluída");
+        if (res.data.archived.length > 0) {
+          toast.info("Essa publicação já tem decisão do cliente, então foi arquivada.", {
+            description: "O histórico de aprovação fica guardado. Dá para desarquivar depois.",
+          });
+        } else {
+          toast.success("Publicação excluída");
+        }
         router.push(feedHref);
       } else {
         toast.error(res.message);

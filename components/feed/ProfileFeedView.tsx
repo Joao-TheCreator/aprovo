@@ -188,7 +188,19 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
         toast.error(res.message);
         return;
       }
-      toast.success(kind === "archive" ? "Publicações arquivadas" : "Publicações excluídas");
+      if (kind === "archive") {
+        toast.success("Publicações arquivadas");
+      } else if (res.data && res.data.archived.length > 0) {
+        const n = res.data.archived.length;
+        toast.info(
+          n === 1
+            ? "1 publicação tem decisão do cliente e foi arquivada em vez de excluída."
+            : `${n} publicações têm decisão do cliente e foram arquivadas em vez de excluídas.`,
+          { description: "O histórico de aprovação fica guardado." },
+        );
+      } else {
+        toast.success("Publicações excluídas");
+      }
       setSelectingMode(false);
       router.refresh();
     });
