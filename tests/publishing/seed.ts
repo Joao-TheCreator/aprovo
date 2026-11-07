@@ -1,7 +1,10 @@
 import { eq } from "drizzle-orm";
 import { instagramConnections, mediaAssets, postMedia, posts, publications } from "@/db/schema";
+import { encrypt } from "@/lib/crypto/secretbox";
 import { testDb as db } from "../setup";
 import { seedWorkspace } from "../media/helpers";
+
+process.env.AUTH_SECRET ||= "test-secret";
 
 export const PUBLISH_SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
 
@@ -28,7 +31,8 @@ export async function seedJob(opts: Seed = {}) {
         workspaceId: base.ws.id,
         igUserId: "ig1",
         username: "cliente",
-        accessTokenEnc: "enc",
+        // A real envelope: health checks and the scheduler decrypt it before calling Meta.
+        accessTokenEnc: encrypt("TOKEN_SEED"),
         tokenExpiresAt: new Date(Date.now() + 86_400_000),
         scopes: PUBLISH_SCOPES,
         ...opts.connection,

@@ -583,6 +583,33 @@ describe("approvals", () => {
       expect(view.recipientName).toBe("Ana");
       expect(view.items.find((i) => i.postId === a)?.decision?.decision).toBe("changes_requested");
       expect(view.items.find((i) => i.postId === b)?.decision).toBeNull();
+      // original links settle nothing: Ana's own decision is not "locked" on her link
+      expect(view.items.every((i) => !i.locked)).toBe(true);
+    });
+
+    it("original links: another recipient's decision does not settle the item; link is consumed only after all items", async () => {
+      const { profile, mkPost } = await seed();
+      const [a, b] = [await mkPost(), await mkPost()];
+      const r = await createApprovalRequest({
+        profileId: profile.id,
+        postIds: [a, b],
+        recipients: [{ name: "Carlos" }, { name: "Ana" }],
+      });
+      if (!r.ok) throw new Error(r.code);
+      const [carlos, ana] = r.data.links.map((l) => tokenOf(l.url));
+
+      expect((await decide(carlos, { postId: a, decision: "approved" })).status).toBe(200);
+      const view = await getPublicApproval(ana);
+      expect(view.items.find((i) => i.postId === a)).toMatchObject({
+        decision: null,
+        locked: false,
+      });
+
+      expect((await decide(ana, { postId: a, decision: "approved" })).status).toBe(200);
+      expect((await getPublicApproval(ana)).linkState).toBe("active");
+      expect((await decide(ana, { postId: b, decision: "approved" })).status).toBe(200);
+      expect((await getPublicApproval(ana)).linkState).toBe("used");
+      expect((await getPublicApproval(carlos)).linkState).toBe("active");
     });
 
     it("records opens with ip/user agent for active and used links; used view is a read-only receipt", async () => {

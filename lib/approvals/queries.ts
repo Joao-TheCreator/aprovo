@@ -25,7 +25,7 @@ import type {
   DecisionRecord,
   PublicApprovalView,
 } from "./contracts";
-import { APPROVAL_RULE, derivePostStatus, resolveLink } from "./decide";
+import { APPROVAL_RULE, derivePostStatus, resolveLink, settledItemsForLink } from "./decide";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -72,6 +72,10 @@ async function lastDecisions(
   const map = new Map<string, DecisionRow>();
   for (const r of rows) map.set(r.postId, r);
   return map;
+}
+
+function toDecisionOrNull(d: DecisionRow | undefined): DecisionRecord | null {
+  return d ? toRecord(d) : null;
 }
 
 function senderName(u: { name: string | null; email: string | null } | undefined): string {
@@ -172,6 +176,8 @@ export async function getPublicApproval(
   });
   // Personal links show (and lock) only their own decisions; shared links show the latest of any link.
   const decisions = await lastDecisions(request.id, link.mode === "personal" ? link.id : undefined);
+  // Items decided before this personal link existed (partial reopen) come back locked.
+  const settled = await settledItemsForLink(db, request.id, link);
 
   return {
     linkState: used ? "used" : "active",
@@ -201,7 +207,8 @@ export async function getPublicApproval(
       hashtags: post.hashtags,
       scheduledFor: post.scheduledFor,
       media: mediaByPost.get(post.id) ?? [],
-      decision: decisions.has(post.id) ? toRecord(decisions.get(post.id)!) : null,
+      decision: toDecisionOrNull(decisions.get(post.id) ?? settled.get(post.id)),
+      locked: !decisions.has(post.id) && settled.has(post.id),
     })),
   };
 }

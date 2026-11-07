@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { db, type Database } from "@/db/client";
 import {
   approvalDecisions,
@@ -114,6 +114,37 @@ function toRecord(d: DecisionRow): DecisionRecord {
   };
 }
 
+/**
+ * Items already settled for a personal link: decided in the current round (at or after the post's
+ * `sent_for_approval_at`) BEFORE the link was created. Such a link shows them locked and never has
+ * to decide them (doc 13 section 4). Latest settled decision per post. Shared links settle nothing.
+ */
+export async function settledItemsForLink(
+  exec: Pick<Tx, "select">,
+  requestId: string,
+  link: Pick<LinkRow, "mode" | "createdAt">,
+): Promise<Map<string, DecisionRow>> {
+  const map = new Map<string, DecisionRow>();
+  if (link.mode !== "personal") return map;
+  const rows = await exec
+    .select({ decision: approvalDecisions })
+    .from(approvalDecisions)
+    .innerJoin(posts, eq(posts.id, approvalDecisions.postId))
+    .where(
+      and(
+        eq(approvalDecisions.requestId, requestId),
+        lt(approvalDecisions.decidedAt, link.createdAt),
+        or(
+          isNull(posts.sentForApprovalAt),
+          gte(approvalDecisions.decidedAt, posts.sentForApprovalAt),
+        ),
+      ),
+    )
+    .orderBy(asc(approvalDecisions.decidedAt));
+  for (const r of rows) map.set(r.decision.postId, r.decision);
+  return map;
+}
+
 /** Locks the link row and re-reads its state (serializes concurrent decisions of the same link). */
 async function lockLink(tx: Tx, linkId: string, now: Date) {
   const [fresh] = await tx
@@ -178,7 +209,7 @@ async function refreshRequestStatus(tx: Tx, requestId: string, now: Date): Promi
     .where(eq(approvalRequests.id, requestId));
 }
 
-/** Consumes a personal link when this link decided every item of the request. Returns whether it is used now. */
+/** Consumes a personal link when every item is decided by this link or settled for it. Returns whether it is used now. */
 async function consumeLinkIfComplete(
   tx: Tx,
   link: LinkRow,
@@ -186,18 +217,18 @@ async function consumeLinkIfComplete(
   now: Date,
 ): Promise<boolean> {
   if (link.mode !== "personal") return false;
-  const [{ total, decided }] = await tx
-    .select({
-      total: sql<number>`count(*)::int`,
-      decided: sql<number>`count(*) filter (where exists (
-        select 1 from approval_decisions d
-        where d.request_id = approval_items.request_id
-          and d.post_id = approval_items.post_id
-          and d.link_id = ${link.id}))::int`,
-    })
+  const items = await tx
+    .select({ postId: approvalItems.postId })
     .from(approvalItems)
     .where(eq(approvalItems.requestId, request.id));
-  if (total === 0 || decided < total) return false;
+  if (items.length === 0) return false;
+  const mine = await tx
+    .select({ postId: approvalDecisions.postId })
+    .from(approvalDecisions)
+    .where(and(eq(approvalDecisions.requestId, request.id), eq(approvalDecisions.linkId, link.id)));
+  const done = new Set(mine.map((d) => d.postId));
+  const settled = await settledItemsForLink(tx, request.id, link);
+  if (items.some((i) => !done.has(i.postId) && !settled.has(i.postId))) return false;
   await tx
     .update(approvalLinks)
     .set({ usedAt: now, usedReason: "decided", updatedAt: now })
@@ -226,12 +257,15 @@ async function writeDecision(
     now: Date;
     meta: { ip: string | null; userAgent: string | null };
     approverName: string | null;
+    settled: Map<string, DecisionRow>;
   },
   input: DecideInput,
 ): Promise<
   { kind: "already"; existing: DecisionRow | null } | ({ kind: "written" } & WrittenDecision)
 > {
   const { link, request, post, now, meta } = ctx;
+  const settledBefore = ctx.settled.get(post.id);
+  if (settledBefore) return { kind: "already", existing: settledBefore };
   const existing = await tx
     .select()
     .from(approvalDecisions)
@@ -365,9 +399,18 @@ export async function decideByToken(
     const link = locked.link;
     const [post] = await tx.select().from(posts).where(eq(posts.id, input.postId)).for("update");
     if (!post) return null;
+    const settled = await settledItemsForLink(tx, request.id, link);
     const written = await writeDecision(
       tx,
-      { link, request, post, now, meta, approverName: approverFor(link, input.approverName) },
+      {
+        link,
+        request,
+        post,
+        now,
+        meta,
+        approverName: approverFor(link, input.approverName),
+        settled,
+      },
       input,
     );
     if (written.kind === "already") return "already" as const;
@@ -395,7 +438,7 @@ export async function decideByToken(
   };
 }
 
-/** "Aprovar todos" and similar: all decisions in ONE transaction. Items this link already decided are skipped. */
+/** "Aprovar todos" and similar: all decisions in ONE transaction. Items this link already decided (or that are settled for it) are skipped. */
 export async function decideManyByToken(
   token: string,
   input: DecideManyInput,
@@ -429,6 +472,7 @@ export async function decideManyByToken(
       .for("update");
     if (rows.length !== postIds.length) return null;
 
+    const settled = await settledItemsForLink(tx, request.id, link);
     const written: Array<WrittenDecision> = [];
     const results: DecideManyItemResult[] = [];
     for (const post of rows) {
@@ -442,6 +486,7 @@ export async function decideManyByToken(
           now,
           meta,
           approverName: approverFor(link, input.approverName ?? d.approverName),
+          settled,
         },
         d,
       );

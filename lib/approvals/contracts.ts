@@ -142,6 +142,8 @@ export type PublicApprovalView = {
     scheduledFor: Date | null;
     media: PostMediaItem[];
     decision: DecisionRecord | null;
+    /** True when the decision was settled before this personal link existed (reopen of other items). */
+    locked: boolean;
   }>;
 };
 
@@ -231,7 +233,7 @@ export const APPROVAL_ERROR_MESSAGES: Record<string, string> = {
   link_expired: "Este link expirou. Peça um novo link ao seu social media.",
   link_revoked: "Este link foi cancelado pelo seu social media.",
   link_inactive: "Este link não está mais ativo. Peça um novo link ao seu social media.",
-  already_decided: "Esta publicação já foi decidida por este link.",
+  already_decided: "Esta publicação já foi decidida.",
   rate_limited: "Muitas tentativas. Aguarde um minuto e tente de novo.",
   not_found: "Envio não encontrado.",
 };

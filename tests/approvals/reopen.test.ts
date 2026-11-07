@@ -36,11 +36,16 @@ vi.mock("@/lib/auth/require", async () => {
 vi.mock("@/lib/email/send", () => ({ sendDecisionEmail: vi.fn(async () => undefined) }));
 
 import { createApprovalRequest, reopenApprovalRequest } from "@/lib/approvals/actions";
-import { listApprovalRequests, suggestReopenItems } from "@/lib/approvals/queries";
+import {
+  getPublicApproval,
+  listApprovalRequests,
+  suggestReopenItems,
+} from "@/lib/approvals/queries";
 import { OPENS_RETENTION_DAYS, purgeLinkOpens } from "@/lib/approvals/purge";
 import { resetRateLimits } from "@/lib/approvals/rate-limit";
 import { lastRoundNote, roundSummaries, shortUserAgent } from "@/lib/approvals/ui-format";
 import { POST as decideRoute } from "@/app/api/approval/[token]/decide/route";
+import { POST as decideAllRoute } from "@/app/api/approval/[token]/decide-all/route";
 
 async function seed() {
   process.env.APP_URL = "http://localhost:3000";
@@ -73,6 +78,17 @@ const tokenOf = (url: string) => url.split("/a/")[1];
 function decide(token: string, body: unknown) {
   return decideRoute(
     new NextRequest(`http://localhost/api/approval/${token}/decide`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "x-forwarded-for": "203.0.113.7", "user-agent": "vitest-ua" },
+    }),
+    { params: Promise.resolve({ token }) },
+  );
+}
+
+function decideAll(token: string, body: unknown) {
+  return decideAllRoute(
+    new NextRequest(`http://localhost/api/approval/${token}/decide-all`, {
       method: "POST",
       body: JSON.stringify(body),
       headers: { "x-forwarded-for": "203.0.113.7", "user-agent": "vitest-ua" },
@@ -218,6 +234,78 @@ describe("reopen approval request (doc 13 section 4)", () => {
     const [summary] = await listApprovalRequests(profile.id);
     expect(summary.rounds.flatMap((x) => x.decisions)).toHaveLength(3);
     expect(summary.rounds.map((x) => x.decisions.length)).toEqual([2, 1]);
+  });
+
+  it("partial reopen: settled items are locked on the new link, which is consumed after the reopened one", async () => {
+    const { profile, mkPost } = await seed();
+    const [a, b] = [await mkPost(), await mkPost()];
+    const r = await send(profile.id, [a, b]);
+    await decide(r.token, { postId: a, decision: "approved" });
+    await decide(r.token, { postId: b, decision: "changes_requested", comment: "Ajustar" });
+    expect((await linkOf(r.linkId)).usedReason).toBe("decided");
+
+    const out = await reopen(r.requestId, [b]);
+    const token = tokenOf(out.url);
+
+    const view = await getPublicApproval(token);
+    expect(view.linkState).toBe("active");
+    const va = view.items.find((i) => i.postId === a)!;
+    const vb = view.items.find((i) => i.postId === b)!;
+    expect(va.locked).toBe(true);
+    expect(va.decision).toMatchObject({ decision: "approved", approverName: "Carlos" });
+    expect(vb.locked).toBe(false);
+    expect(vb.decision).toBeNull();
+
+    // the settled item cannot be decided again via the new link
+    const again = await decide(token, { postId: a, decision: "changes_requested", comment: "x" });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ code: "already_decided" });
+    expect((await postOf(a)).status).toBe("approved");
+    expect((await linkOf(out.links[0].linkId)).usedAt).toBeNull();
+
+    const ok = await decide(token, { postId: b, decision: "approved" });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ data: { status: "approved", linkUsed: true } });
+    expect((await postOf(b)).status).toBe("approved");
+    expect((await requestOf(r.requestId)).status).toBe("decided");
+    const used = await linkOf(out.links[0].linkId);
+    expect(used.usedAt).not.toBeNull();
+    expect(used.usedReason).toBe("decided");
+
+    const receipt = await getPublicApproval(token);
+    expect(receipt).toMatchObject({ linkState: "used", readOnly: true });
+    expect(receipt.items.find((i) => i.postId === a)?.locked).toBe(true);
+    expect(receipt.items.find((i) => i.postId === b)?.locked).toBe(false);
+    expect(receipt.items.find((i) => i.postId === b)?.decision?.decision).toBe("approved");
+  });
+
+  it("partial reopen: decide-all ignores settled items and consumes the link", async () => {
+    const { profile, mkPost } = await seed();
+    const [a, b] = [await mkPost(), await mkPost()];
+    const r = await send(profile.id, [a, b]);
+    await decide(r.token, { postId: a, decision: "approved" });
+    await decide(r.token, { postId: b, decision: "changes_requested", comment: "Ajustar" });
+    const out = await reopen(r.requestId, [b]);
+
+    const res = await decideAll(tokenOf(out.url), {
+      decisions: [
+        { postId: a, decision: "changes_requested", comment: "nao" },
+        { postId: b, decision: "approved" },
+      ],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.linkUsed).toBe(true);
+    const ra = body.data.results.find((x: { postId: string }) => x.postId === a);
+    const rb = body.data.results.find((x: { postId: string }) => x.postId === b);
+    expect(ra).toMatchObject({ skipped: true, decision: { decision: "approved" } });
+    expect(rb).toMatchObject({ skipped: false, status: "approved" });
+    expect((await postOf(a)).status).toBe("approved");
+    expect((await postOf(b)).status).toBe("approved");
+    expect((await linkOf(out.links[0].linkId)).usedAt).not.toBeNull();
+    // only the reopened item got a new decision: 3 in total
+    const [summary] = await listApprovalRequests(profile.id);
+    expect(summary.rounds.flatMap((x) => x.decisions)).toHaveLength(3);
   });
 
   it("refuses scheduled posts and foreign items, validates input", async () => {
