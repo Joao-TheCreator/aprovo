@@ -107,3 +107,21 @@ com `instagram_business_content_publish`.
 - Plano Hobby é só para uso não comercial; ao cobrar clientes, migrar (ADR-002).
 - O Claude não cola segredos, não faz login e não aceita termos; confere variáveis só por
   tamanho e prefixo.
+
+## Fase 6 em produção (07/11/2026)
+
+- `main` recebeu os PRs #1 e #2 (T1..T12); deploy da Vercel ok; `IG_PUBLISH_ENABLED=true` cadastrada.
+- App ELIM MKT na Meta: permissão `instagram_business_content_publish` adicionada ("Pronto para
+  teste"); URL de desautorização trocada para `https://aprovo-six.vercel.app/api/instagram/deauthorize`
+  (a de exclusão de dados continua em `/legal/exclusao-de-dados`).
+- `@joaomoreiraj` reconectada com os escopos `instagram_business_basic` +
+  `instagram_business_content_publish`; Configurações mostra o badge "Publicação" e a cota
+  "Publicações hoje: 0/100" lida da Meta.
+- Cloudflare (conta jpedrobiel@gmail.com): Worker **aprovo-cron**
+  (`https://aprovo-cron.jpedrobiel.workers.dev`) com o código de `docs/10` §10, variável
+  `APROVO_URL`, segredo `CRON_SECRET` (mesmo valor da Vercel) e Cron Trigger a cada minuto. Um
+  `GET` na URL do Worker dispara o agendador à mão e devolve o JSON da rota.
+- `vercel.json` mantém o cron diário `30 3 * * *` só como rede de segurança (o Hobby recusa
+  deploys com cron mais frequente).
+- Pendente: App Review da permissão de publicar (docs/10 §9) e a conta do Samuel reconectar
+  pelo próprio login.
