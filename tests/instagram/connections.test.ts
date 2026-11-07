@@ -184,6 +184,7 @@ describe("refresh route", () => {
       failed: 1,
       checked: 2,
       unhealthy: 0,
+      purgedOpens: 0,
     });
     expect(n).toBe(2);
 
@@ -195,6 +196,7 @@ describe("refresh route", () => {
       failed: 0,
       checked: 2,
       unhealthy: 0,
+      purgedOpens: 0,
     });
     const rows = await listConnections(s.ws.id);
     expect(rows.every((r) => decrypt(r.accessTokenEnc) === "FBREFRESHED")).toBe(true);

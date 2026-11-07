@@ -245,6 +245,7 @@ describe("refresh route health summary", () => {
       failed: 0,
       checked: 1,
       unhealthy: 1,
+      purgedOpens: 0,
     });
     expect((await getConnectionById(conn.id, s.ws.id))!.status).toBe("expired");
   });

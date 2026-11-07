@@ -1,9 +1,10 @@
 "use server";
 /** Phase 4 approval actions (social media side). Every action authenticates and scopes by workspace. */
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
 import {
+  approvalDecisions,
   approvalItems,
   approvalLinks,
   approvalRequests,
@@ -13,18 +14,22 @@ import {
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity/log";
 import { requireWorkspaceForProfile } from "@/lib/auth/require";
+import { notifyEvent } from "@/lib/realtime/notify";
 import type { ActionResult } from "@/lib/profiles/contracts";
 import {
   APPROVAL_ERROR_MESSAGES,
   LINK_TTL_DAYS,
   createApprovalRequestSchema,
   issuePersonalLinkSchema,
+  reopenApprovalRequestSchema,
   type ApprovalLinkMode,
   type CreateApprovalRequestInput,
   type CreateApprovalRequestResult,
   type IssuedLink,
   type RecipientInput,
+  type ReopenApprovalRequestInput,
 } from "./contracts";
+import { APPROVAL_RULE, derivePostStatus } from "./decide";
 import { hashToken, issueToken } from "./token";
 
 function fail(code: string, message?: string) {
@@ -268,6 +273,207 @@ export async function issueApprovalLink(
   label?: string,
 ): Promise<CreateApprovalRequestResult> {
   return issueLink(requestId, { mode: "shared", label: label?.trim().slice(0, 80) });
+}
+
+const nameKey = (name: string | null | undefined) => (name ?? "").trim().toLowerCase();
+
+type ReopenOutcome =
+  { ok: true; links: IssuedLink[] } | { ok: false; code: string; message?: string };
+
+/**
+ * Reopens a decided (or partially decided) request for a new round of decisions, keeping the
+ * decision history in the same request (doc 13 section 4).
+ *
+ * Why new links are mandatory: a personal link counts a decision made by the SAME link as
+ * "already decided" regardless of `sent_for_approval_at` (unique index request+link+post), so an
+ * old link could never decide a reopened item again. Each recipient therefore gets a NEW link and
+ * the old still-active link of the same person is superseded (`used_reason = superseded`).
+ */
+export async function reopenApprovalRequest(
+  input: ReopenApprovalRequestInput,
+): Promise<CreateApprovalRequestResult> {
+  const parsed = reopenApprovalRequestSchema.safeParse(input);
+  if (!parsed.success) return fail("invalid_input", parsed.error.issues[0]?.message);
+  const { requestId, recipients } = parsed.data;
+  const postIds = [...new Set(parsed.data.postIds)];
+  const loaded = await loadRequest(requestId);
+  if (!loaded) return fail("not_found");
+  const { req, member } = loaded;
+  const actor = `user:${member.user.id}` as const;
+
+  const newLinks = recipients.map((r) =>
+    newLinkValues(req.id, { mode: "personal", recipientName: r.name, recipientContact: r.contact }),
+  );
+  const now = new Date();
+
+  const outcome = await db.transaction(async (tx): Promise<ReopenOutcome> => {
+    const [locked] = await tx
+      .select()
+      .from(approvalRequests)
+      .where(eq(approvalRequests.id, req.id))
+      .for("update");
+    if (!locked) return { ok: false, code: "not_found" };
+    if (locked.status === "revoked") return { ok: false, code: "request_revoked" };
+
+    const items = await tx
+      .select({ post: posts })
+      .from(approvalItems)
+      .innerJoin(posts, eq(posts.id, approvalItems.postId))
+      .where(eq(approvalItems.requestId, req.id))
+      .orderBy(asc(posts.id))
+      .for("update", { of: posts });
+    const byId = new Map(items.map((i) => [i.post.id, i.post]));
+    if (postIds.some((id) => !byId.has(id))) {
+      return { ok: false, code: "not_found", message: "Publicação não encontrada neste envio." };
+    }
+    const reopened = postIds.map((id) => byId.get(id)!);
+    if (reopened.some((p) => p.status === "published" || p.status === "scheduled")) {
+      return {
+        ok: false,
+        code: "invalid_status",
+        message: "Publicações agendadas ou publicadas não podem ser reabertas.",
+      };
+    }
+    const media = await tx
+      .select({ postId: postMedia.postId, status: mediaAssets.status })
+      .from(postMedia)
+      .innerJoin(mediaAssets, eq(mediaAssets.id, postMedia.assetId))
+      .where(inArray(postMedia.postId, postIds));
+    for (const id of postIds) {
+      const st = media.filter((m) => m.postId === id);
+      if (st.length === 0 || st.some((m) => m.status !== "ready")) {
+        return { ok: false, code: "no_ready_media" };
+      }
+    }
+
+    // New links first, so the superseded ones can point at them.
+    const linkIds: string[] = [];
+    for (const nl of newLinks) {
+      const [l] = await tx
+        .insert(approvalLinks)
+        .values(nl.values)
+        .returning({ id: approvalLinks.id });
+      linkIds.push(l.id);
+    }
+    const activeOld = await tx
+      .select()
+      .from(approvalLinks)
+      .where(
+        and(
+          eq(approvalLinks.requestId, req.id),
+          eq(approvalLinks.mode, "personal"),
+          isNull(approvalLinks.revokedAt),
+          isNull(approvalLinks.usedAt),
+          gt(approvalLinks.expiresAt, now),
+        ),
+      );
+    for (let i = 0; i < recipients.length; i++) {
+      const key = nameKey(recipients[i].name);
+      const oldIds = activeOld
+        .filter((l) => nameKey(l.recipientName) === key && !linkIds.includes(l.id))
+        .map((l) => l.id);
+      if (oldIds.length === 0) continue;
+      await tx
+        .update(approvalLinks)
+        .set({
+          usedAt: now,
+          usedReason: "superseded",
+          supersededByLinkId: linkIds[i],
+          updatedAt: now,
+        })
+        .where(inArray(approvalLinks.id, oldIds));
+    }
+
+    await tx
+      .update(posts)
+      .set({ status: "pending_approval", sentForApprovalAt: now, approvedAt: null, updatedAt: now })
+      .where(inArray(posts.id, postIds));
+
+    // Request status: items not reopened keep their decisions.
+    const reopenedSet = new Set(postIds);
+    const kept = items.filter((i) => !reopenedSet.has(i.post.id));
+    let anyFinal = false;
+    if (kept.length > 0) {
+      const decisions = await tx
+        .select({
+          postId: approvalDecisions.postId,
+          linkId: approvalDecisions.linkId,
+          decision: approvalDecisions.decision,
+          decidedAt: approvalDecisions.decidedAt,
+        })
+        .from(approvalDecisions)
+        .where(eq(approvalDecisions.requestId, req.id));
+      const recipientIds =
+        APPROVAL_RULE === "all"
+          ? (
+              await tx
+                .select({ id: approvalLinks.id })
+                .from(approvalLinks)
+                .where(
+                  and(
+                    eq(approvalLinks.requestId, req.id),
+                    eq(approvalLinks.mode, "personal"),
+                    isNull(approvalLinks.revokedAt),
+                    isNull(approvalLinks.supersededByLinkId),
+                  ),
+                )
+            ).map((l) => l.id)
+          : [];
+      anyFinal = kept.some(
+        ({ post }) =>
+          derivePostStatus(
+            decisions.filter((d) => d.postId === post.id),
+            post.sentForApprovalAt,
+            APPROVAL_RULE,
+            recipientIds,
+          ) !== "pending_approval",
+      );
+    }
+    await tx
+      .update(approvalRequests)
+      .set({ status: anyFinal ? "partially_decided" : "open", updatedAt: now })
+      .where(eq(approvalRequests.id, req.id));
+
+    await logActivity(tx, {
+      profileId: req.profileId,
+      actor,
+      event: "approval.reopened",
+      payload: { requestId: req.id, postIds, linkIds },
+    });
+    for (const [i, nl] of newLinks.entries()) {
+      await logActivity(tx, {
+        profileId: req.profileId,
+        actor,
+        event: "approval.link_issued",
+        payload: { requestId: req.id, linkId: linkIds[i], mode: nl.mode },
+      });
+    }
+    for (const postId of postIds) {
+      await notifyEvent(tx, {
+        type: "post.status",
+        profileId: req.profileId,
+        postId,
+        status: "pending_approval",
+        decision: null,
+        at: now.toISOString(),
+      });
+    }
+    return { ok: true, links: newLinks.map((nl, i) => issuedOf(nl, linkIds[i])) };
+  });
+
+  if (!outcome.ok) return fail(outcome.code, outcome.message);
+  revalidateApprovals(req.profileId);
+  const links = outcome.links;
+  return {
+    ok: true,
+    data: {
+      requestId: req.id,
+      linkId: links[0].linkId,
+      url: links[0].url,
+      expiresAt: links[0].expiresAt,
+      links,
+    },
+  };
 }
 
 export async function revokeApprovalLink(linkId: string): Promise<ActionResult> {

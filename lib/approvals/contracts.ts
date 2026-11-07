@@ -36,6 +36,13 @@ export type CreateApprovalRequestInput = z.input<typeof createApprovalRequestSch
 
 export const issuePersonalLinkSchema = recipientSchema;
 
+export const reopenApprovalRequestSchema = z.object({
+  requestId: z.string().uuid(),
+  postIds: z.array(z.string().uuid()).min(1).max(50),
+  recipients: z.array(recipientSchema).min(1, "Informe para quem é o link.").max(5),
+});
+export type ReopenApprovalRequestInput = z.input<typeof reopenApprovalRequestSchema>;
+
 export type IssuedLink = {
   linkId: string;
   recipientName: string | null;
@@ -160,6 +167,19 @@ export type ApprovalLinkSummary = {
   }>;
 };
 
+export type ApprovalRound = {
+  /** Distinct `sent_for_approval_at` of the items (first send or a reopen). */
+  startedAt: Date;
+  decisions: Array<{
+    postId: string;
+    /** Recipient name (personal link) or label (shared link). */
+    recipientName: string | null;
+    decision: "approved" | "changes_requested";
+    decidedAt: Date;
+    comment: string | null;
+  }>;
+};
+
 export type ApprovalRequestSummary = {
   id: string;
   title: string | null;
@@ -169,6 +189,10 @@ export type ApprovalRequestSummary = {
   profile: { id: string; igUsername: string; avatarUrl: string | null };
   counts: { items: number; approved: number; changes: number; pending: number };
   links: ApprovalLinkSummary[];
+  /** Oldest first. A decision belongs to the latest round that started at or before it. */
+  rounds: ApprovalRound[];
+  /** Item ids to pre-select in the reopen sheet (changes requested or edited after the decision). */
+  reopenSuggestions: string[];
   items: Array<{
     postId: string;
     kind: PostKind;
@@ -201,6 +225,7 @@ export const APPROVAL_ERROR_MESSAGES: Record<string, string> = {
   no_ready_media: "Alguma publicação ainda está processando a mídia. Aguarde para enviar.",
   published_locked: "Publicações já publicadas no Instagram não podem ser alteradas.",
   invalid_status: "Só rascunhos e publicações com ajustes solicitados podem ser enviados.",
+  request_revoked: "Envios cancelados não podem ser reabertos.",
   link_used:
     "Este link já foi utilizado. Para uma nova aprovação, peça um link novo ao seu social media.",
   link_expired: "Este link expirou. Peça um novo link ao seu social media.",

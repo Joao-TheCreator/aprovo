@@ -21,6 +21,7 @@ import { getStorage } from "@/lib/storage";
 import type {
   ApprovalLinkSummary,
   ApprovalRequestSummary,
+  ApprovalRound,
   DecisionRecord,
   PublicApprovalView,
 } from "./contracts";
@@ -208,6 +209,57 @@ export async function getPublicApproval(
 type RequestRow = typeof approvalRequests.$inferSelect;
 type ProfileRow = typeof profiles.$inferSelect;
 
+/**
+ * Rounds of a request: one per distinct `sent_for_approval_at` of its items (first send, then each
+ * reopen). A decision belongs to the latest round that started at or before it.
+ */
+export function buildRounds(
+  createdAt: Date,
+  sentAts: Array<Date | null>,
+  decisions: DecisionRow[],
+  names: Map<string, string | null>,
+): ApprovalRound[] {
+  const starts = [...new Set(sentAts.filter((d): d is Date => d !== null).map((d) => d.getTime()))]
+    .sort((a, b) => a - b)
+    .map((t) => new Date(t));
+  if (starts.length === 0) starts.push(createdAt);
+  const rounds: ApprovalRound[] = starts.map((startedAt) => ({ startedAt, decisions: [] }));
+  const sorted = [...decisions].sort((a, b) => a.decidedAt.getTime() - b.decidedAt.getTime());
+  for (const d of sorted) {
+    let idx = 0;
+    for (let i = 0; i < rounds.length; i++) {
+      if (rounds[i].startedAt.getTime() <= d.decidedAt.getTime()) idx = i;
+    }
+    rounds[idx].decisions.push({
+      postId: d.postId,
+      recipientName: names.get(d.linkId) ?? d.approverName ?? null,
+      decision: d.decision,
+      decidedAt: d.decidedAt,
+      comment: d.comment,
+    });
+  }
+  return rounds;
+}
+
+/** Pure rule behind `suggestReopenItems`. Scheduled and published posts are never suggested. */
+export function computeReopenSuggestions(
+  postRows: Array<{ id: string; status: string; updatedAt: Date }>,
+  decisions: Array<{ postId: string; decidedAt: Date }>,
+): string[] {
+  const lastAt = new Map<string, number>();
+  for (const d of decisions) {
+    lastAt.set(d.postId, Math.max(lastAt.get(d.postId) ?? 0, d.decidedAt.getTime()));
+  }
+  return postRows
+    .filter((p) => {
+      if (p.status === "published" || p.status === "scheduled") return false;
+      if (p.status === "changes_requested") return true;
+      const last = lastAt.get(p.id);
+      return last !== undefined && p.updatedAt.getTime() > last;
+    })
+    .map((p) => p.id);
+}
+
 async function summarize(
   rows: Array<{ request: RequestRow; profile: ProfileRow }>,
 ): Promise<ApprovalRequestSummary[]> {
@@ -244,7 +296,12 @@ async function summarize(
   const decByKey = new Map<string, DecisionRow>();
   for (const d of decRows) decByKey.set(`${d.requestId}:${d.postId}`, d);
 
-  const linkName = new Map(links.map((l) => [l.id, l.recipientName ?? l.label]));
+  const linkName = new Map(
+    links.map((l) => [
+      l.id,
+      l.recipientName ?? l.label ?? (l.mode === "shared" ? "Link aberto" : null),
+    ]),
+  );
   const linkIds = links.map((l) => l.id);
   const ranked = db
     .select({
@@ -281,8 +338,19 @@ async function summarize(
 
   return rows.map(({ request, profile }) => {
     const its = items.filter((i) => i.requestId === request.id);
+    const rounds = buildRounds(
+      request.createdAt,
+      its.map(({ post }) => post.sentForApprovalAt),
+      decRows.filter((d) => d.requestId === request.id),
+      linkName,
+    );
     const summaries = its.map(({ post }) => {
-      const d = decByKey.get(`${request.id}:${post.id}`);
+      const last = decByKey.get(`${request.id}:${post.id}`);
+      // Only a decision of the current round counts here; older ones live in `rounds`.
+      const d =
+        last && (!post.sentForApprovalAt || last.decidedAt >= post.sentForApprovalAt)
+          ? last
+          : undefined;
       return {
         postId: post.id,
         kind: post.kind,
@@ -343,6 +411,11 @@ async function summarize(
         pending: summaries.length - approved - changes,
       },
       links: reqLinks,
+      rounds,
+      reopenSuggestions: computeReopenSuggestions(
+        its.map((i) => i.post),
+        decRows.filter((d) => d.requestId === request.id),
+      ),
       items: summaries,
     };
   });
@@ -392,4 +465,38 @@ export async function getApprovalRequest(
     throw e;
   }
   return (await summarize([row]))[0] ?? null;
+}
+
+/**
+ * Item ids to pre-select when reopening a request: posts with changes requested, or edited after
+ * their last decision. Scheduled and published posts are never suggested (they cannot be reopened).
+ */
+export async function suggestReopenItems(requestId: string): Promise<string[]> {
+  if (!UUID_RE.test(requestId)) return [];
+  const [row] = await db
+    .select({ profileId: approvalRequests.profileId })
+    .from(approvalRequests)
+    .where(eq(approvalRequests.id, requestId))
+    .limit(1);
+  if (!row) return [];
+  try {
+    await requireWorkspaceForProfile(row.profileId);
+  } catch (e) {
+    if (isNextNotFound(e)) return [];
+    throw e;
+  }
+  const items = await db
+    .select({ post: posts })
+    .from(approvalItems)
+    .innerJoin(posts, eq(posts.id, approvalItems.postId))
+    .where(eq(approvalItems.requestId, requestId))
+    .orderBy(asc(posts.position));
+  const decisions = await db
+    .select({ postId: approvalDecisions.postId, decidedAt: approvalDecisions.decidedAt })
+    .from(approvalDecisions)
+    .where(eq(approvalDecisions.requestId, requestId));
+  return computeReopenSuggestions(
+    items.map((i) => i.post),
+    decisions,
+  );
 }

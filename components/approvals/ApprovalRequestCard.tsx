@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
+import { ReopenSheet } from "@/components/approvals/ReopenSheet";
 import { ShareLinkSheet } from "@/components/approvals/ShareLinkSheet";
 import { StatusPill } from "@/components/feed/StatusPill";
 import { Button } from "@/components/ui/button";
@@ -33,8 +34,11 @@ import {
   formatDateBr,
   formatDateTimeBr,
   formatDayMonth,
+  formatDayMonthTime,
   plural,
+  roundSummaries,
   shortCaption,
+  shortUserAgent,
 } from "@/lib/approvals/ui-format";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +63,7 @@ function linkState(l: ApprovalLinkSummary): { label: string; active: boolean } {
     return {
       label:
         l.usedReason === "superseded"
-          ? `Substituído em ${formatDateTimeBr(l.usedAt)}`
+          ? "Substituído por link novo"
           : `Usado em ${formatDateTimeBr(l.usedAt)}`,
       active: false,
     };
@@ -70,6 +74,36 @@ function linkState(l: ApprovalLinkSummary): { label: string; active: boolean } {
     label: l.mode === "shared" ? `Link aberto · ${until}` : `Ativo · ${until}`,
     active: true,
   };
+}
+
+function OpensList({ opens }: { opens: ApprovalLinkSummary["opens"] }) {
+  const [shown, setShown] = useState(false);
+  if (opens.length === 0) return null;
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        aria-expanded={shown}
+        onClick={() => setShown((v) => !v)}
+        className="text-roxo focus-visible:ring-ring/50 min-h-8 rounded text-xs font-semibold outline-none focus-visible:ring-[3px]"
+      >
+        {shown ? "Ocultar aberturas" : "Ver aberturas"}
+      </button>
+      {shown ? (
+        <ul
+          className="text-muted-foreground mt-1 flex flex-col gap-0.5 text-xs"
+          suppressHydrationWarning
+        >
+          {opens.map((o, i) => (
+            <li key={i}>
+              {formatDayMonthTime(o.openedAt)} · {o.ip ?? "IP não informado"} ·{" "}
+              {shortUserAgent(o.userAgent)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function decisionsText(l: ApprovalLinkSummary, total: number): string | null {
@@ -100,10 +134,14 @@ export function ApprovalRequestCard({
   const [newName, setNewName] = useState("");
   const [newContact, setNewContact] = useState("");
   const [issued, setIssued] = useState<IssuedLink[] | null>(null);
+  const [reopenOpen, setReopenOpen] = useState(false);
 
   const status = REQUEST_STATUS[request.status];
   const title = request.title || `Envio de ${formatDayMonth(request.createdAt)}`;
   const closed = request.status === "revoked" || request.status === "decided";
+  const canReopen =
+    request.status !== "revoked" && request.rounds.some((r) => r.decisions.length > 0);
+  const roundLines = roundSummaries(request.rounds);
   const detailsId = `req-${request.id}-details`;
 
   function run(
@@ -183,19 +221,39 @@ export function ApprovalRequestCard({
         Criado em {formatDateBr(request.createdAt)}
       </p>
 
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={detailsId}
-        onClick={() => setExpanded((v) => !v)}
-        className="text-roxo focus-visible:ring-ring/50 flex min-h-11 items-center gap-1 self-start rounded-full text-sm font-semibold outline-none focus-visible:ring-[3px]"
-      >
-        <ChevronDown
-          aria-hidden
-          className={cn("size-4 transition-transform", expanded && "rotate-180")}
-        />
-        Links e decisões
-      </button>
+      {roundLines.length > 1 ||
+      (roundLines.length === 1 && request.rounds[0].decisions.length > 0) ? (
+        <ol
+          aria-label="Rodadas"
+          className="text-muted-foreground flex flex-col gap-0.5 text-xs"
+          suppressHydrationWarning
+        >
+          {roundLines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ol>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          onClick={() => setExpanded((v) => !v)}
+          className="text-roxo focus-visible:ring-ring/50 flex min-h-11 items-center gap-1 self-start rounded-full text-sm font-semibold outline-none focus-visible:ring-[3px]"
+        >
+          <ChevronDown
+            aria-hidden
+            className={cn("size-4 transition-transform", expanded && "rotate-180")}
+          />
+          Links e decisões
+        </button>
+        {canReopen ? (
+          <Button variant="secondary" className="min-h-11" onClick={() => setReopenOpen(true)}>
+            Reabrir
+          </Button>
+        ) : null}
+      </div>
 
       {expanded ? (
         <div id={detailsId} className="flex flex-col gap-4">
@@ -224,8 +282,9 @@ export function ApprovalRequestCard({
                         ) : null}
                         <p className="text-muted-foreground text-xs" suppressHydrationWarning>
                           abriu {l.openedCount}×
-                          {l.lastOpenedAt ? ` · última ${formatDateTimeBr(l.lastOpenedAt)}` : ""}
+                          {l.lastOpenedAt ? ` · última ${formatDayMonthTime(l.lastOpenedAt)}` : ""}
                         </p>
+                        <OpensList opens={l.opens} />
                         {decisionsText(l, request.counts.items) ? (
                           <p className="text-xs font-semibold">
                             {decisionsText(l, request.counts.items)}
@@ -406,6 +465,18 @@ export function ApprovalRequestCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {reopenOpen ? (
+        <ReopenSheet
+          request={request}
+          open
+          onOpenChange={setReopenOpen}
+          onIssued={(links) => {
+            setIssued(links);
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       {issued ? (
         <ShareLinkSheet
