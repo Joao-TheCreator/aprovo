@@ -12,7 +12,10 @@ import {
   activeOAuthProvider,
   buildAuthorizeUrl,
   buildFacebookAuthorizeUrl,
+  canPublish,
   completeOAuth,
+  instagramScopes,
+  PUBLISH_SCOPE,
   listConnections,
   refreshIfNeeded,
   statesMatch,
@@ -153,6 +156,35 @@ describe("authorize url and state", () => {
     expect(statesMatch("abc", "abd")).toBe(false);
     expect(statesMatch(undefined, "abc")).toBe(false);
     expect(statesMatch("abc", null)).toBe(false);
+  });
+});
+
+describe("publish scope behind IG_PUBLISH_ENABLED", () => {
+  afterEach(() => {
+    delete process.env.IG_PUBLISH_ENABLED;
+  });
+
+  it("asks only for the basic scope when the flag is unset or not exactly true", () => {
+    delete process.env.IG_PUBLISH_ENABLED;
+    expect(instagramScopes()).toEqual(["instagram_business_basic"]);
+    process.env.IG_PUBLISH_ENABLED = "false";
+    expect(instagramScopes()).toEqual(["instagram_business_basic"]);
+    expect(new URL(buildAuthorizeUrl("st")).searchParams.get("scope")).toBe(
+      "instagram_business_basic",
+    );
+  });
+
+  it("also asks for the publish scope when the flag is true", () => {
+    process.env.IG_PUBLISH_ENABLED = "true";
+    expect(instagramScopes()).toEqual(["instagram_business_basic", PUBLISH_SCOPE]);
+    expect(new URL(buildAuthorizeUrl("st")).searchParams.get("scope")).toBe(
+      "instagram_business_basic,instagram_business_content_publish",
+    );
+  });
+
+  it("canPublish reflects the granted scopes", () => {
+    expect(canPublish({ scopes: ["instagram_business_basic"] })).toBe(false);
+    expect(canPublish({ scopes: ["instagram_business_basic", PUBLISH_SCOPE] })).toBe(true);
   });
 });
 

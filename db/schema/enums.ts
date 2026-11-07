@@ -25,3 +25,10 @@ export const approvalDecisionValue = pgEnum("approval_decision_value", [
   "approved",
   "changes_requested",
 ]);
+export const connectionStatus = pgEnum("connection_status", [
+  "active",
+  "expired",
+  "revoked",
+  "not_professional",
+  "missing_scope",
+]);

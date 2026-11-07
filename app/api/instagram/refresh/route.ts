@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { refreshExpiringConnections } from "@/lib/instagram/oauth";
+import { checkAllConnections, refreshExpiringConnections } from "@/lib/instagram/oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,7 @@ function authorized(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const result = await refreshExpiringConnections();
-  return NextResponse.json(result);
+  const refresh = await refreshExpiringConnections();
+  const health = await checkAllConnections();
+  return NextResponse.json({ ...refresh, ...health });
 }

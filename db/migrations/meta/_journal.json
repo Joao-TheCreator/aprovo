@@ -43,6 +43,13 @@
       "when": 1794019016811,
       "tag": "0005_sturdy_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794020393287,
+      "tag": "0006_gray_loki",
+      "breakpoints": true
     }
   ]
 }

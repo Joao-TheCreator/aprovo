@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./auth";
+import { connectionStatus } from "./enums";
 import { id, timestamps } from "./columns";
 import { workspaces } from "./workspaces";
 
@@ -22,6 +23,11 @@ export const instagramConnections = pgTable(
     scopes: text("scopes").array().notNull().default([]),
     connectedBy: uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
     lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),
+    /** Health of the connection, maintained by the weekly cron and the deauthorize callback. */
+    status: connectionStatus("status").notNull().default("active"),
+    /** Short human-readable reason for a non-active status. Never contains tokens. */
+    statusDetail: text("status_detail"),
+    statusCheckedAt: timestamp("status_checked_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [uniqueIndex("instagram_connections_workspace_ig_user_uq").on(t.workspaceId, t.igUserId)],
