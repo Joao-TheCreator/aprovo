@@ -42,7 +42,9 @@ jpedrobiel@gmail.com (Vercel via GitHub).
 `RESEND_API_KEY`, `EMAIL_FROM`, `STORAGE_DRIVER=s3`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
 `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT`, `IG_FALLBACK_PROVIDER=none`,
 `META_REDIRECT_URI`*, `META_APP_ID`* (`26109955498700488`, Config), `META_APP_SECRET`*,
-`CRON_SECRET`*. (* só Production.) Nenhuma variável falta.
+`CRON_SECRET`*, `META_FB_APP_ID`* (`1912316206111250`, Config), `META_FB_CONFIG_ID`*
+(`1474715154853745`, Config), `META_FB_APP_SECRET`*. (* só Production.)
+`META_OAUTH_PROVIDER` não está cadastrada: o padrão do código é `instagram` (ADR-009).
 
 ## App na Meta (feito em 06/11/2026)
 
@@ -61,8 +63,33 @@ Instagram" › aba **Configuração da API com login do Instagram**:
   ("deve ser uma URL válida") mesmo com a página respondendo 200; só importa para App Review.
 - A Meta marca essa configuração como obsoleta em favor do "login unificado", que exige
   portfólio empresarial. Continua funcionando; migrar quando for preciso [confirmar prazo].
-- **Funções:** `samuelbozzuto` convidado como Testador do Instagram (pendente de aceite em
-  Instagram › Configurações › Site e apps › Convites de testador).
+- **Funções:** Testadores do Instagram: `samuelbozzuto` e `joaomoreiraj` (aceitos),
+  `samuelbdesigner` (pendente). O convite não gera notificação; aceita-se em
+  instagram.com/accounts/manage_access › Convites de testador.
+- **Login do Facebook (ADR-008, opcional):** produto "Login do Facebook para Empresas" com
+  redirect, desautorização e exclusão configurados; `instagram_basic` habilitada; configuração
+  de login "Aprovo" (`config_id` `1474715154853745`) com `instagram_basic`, `pages_show_list`,
+  `pages_read_engagement`. Validado até a concessão de ativos; não é o padrão.
+
+### Validação de 06/11/2026 e o que ficou temporário
+
+- `@joaomoreiraj` foi convertido para conta **profissional (Empresa)** e conectado pelo Login
+  do Instagram: "Conectado como @joaomoreiraj", feed com 6 posts e miniaturas. A Graph API
+  confirmou que `business_discovery` **não existe** no Login do Instagram, o que levou às
+  ADR-008 e ADR-009.
+- Temporários a desfazer quando o João quiser: vínculo da Página do Facebook **Heloisa Souza**
+  com `@joaomoreiraj` (feito só para testar o Login do Facebook; desfazer no Meta Business
+  Suite da Página › Configurações › Contas vinculadas) e a conversão da conta para
+  profissional. **Atenção:** a conta precisa continuar profissional enquanto for a conta de
+  teste do APROVO; ao voltar para pessoal, a conexão para de funcionar.
+- Integração ELIM MKT nas "Integrações comerciais" do Facebook do João: pode ser removida se o
+  Login do Facebook não for usado.
+
+### Próxima tarefa (ADR-009)
+
+Conexões múltiplas por workspace (uma por conta do Instagram), perfil criado a partir da conta
+conectada, "Conectar perfil" vira "Conectar conta do Instagram"; depois, publicação agendada
+com `instagram_business_content_publish`.
 
 - **Google OAuth:** e-mail do Samuel adicionado como usuário de teste (console.cloud.google.com
   › projeto `aprovo-513922` › Google Auth Platform › Público). O endereço fica no gerenciador

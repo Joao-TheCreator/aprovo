@@ -96,8 +96,8 @@ export default async function ConfiguracoesPage({
             </div>
             {legacyConnection ? (
               <p role="status" className="bg-secondary rounded-xl px-4 py-3 text-sm">
-                Esta conexão usa o login antigo e só carrega o seu próprio feed. Reconecte com o
-                Facebook para importar perfis de clientes.
+                Esta conexão usa o Login do Instagram. Este servidor está configurado para o Login
+                do Facebook; reconecte para usar o mesmo login.
               </p>
             ) : null}
             <div className="flex flex-wrap gap-3">

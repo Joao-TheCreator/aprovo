@@ -113,7 +113,7 @@ export const manualImportSchema = z.object({
 
 /** Shown when the connected token cannot use Business Discovery (legacy Instagram Login). */
 export const NO_BUSINESS_DISCOVERY_MESSAGE =
-  "Esta conexão não permite importar outros perfis. Reconecte com o Facebook em Configurações.";
+  "Esta conexão só carrega o feed da própria conta conectada. Conecte a conta do cliente em Configurações ou importe manualmente.";
 
 /** Human messages for Tela 01 error states. */
 export const CONNECT_ERROR_MESSAGES: Record<ConnectErrorCode, string> = {

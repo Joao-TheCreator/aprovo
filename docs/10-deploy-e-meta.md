@@ -87,6 +87,9 @@ para Pro ou Cloudflare Workers (ADR-002).
 
 ## 6. App na Meta (developers.facebook.com)
 
+> Modelo vigente (ADR-009): Login do Instagram, feeds só de contas conectadas. A seção abaixo
+> descreve a configuração do produto Instagram; o Login do Facebook (ADR-008) fica como opção.
+
 Pré-requisito: uma conta do Facebook do João com acesso a developers.facebook.com. Pode ser
 feito junto com o Claude Cowork.
 
@@ -120,10 +123,15 @@ feito junto com o Claude Cowork.
 
 ## 8. Checklist de validação da integração
 
-- [ ] Login por e-mail ou Google funciona na Vercel.
+Estado em 06/11/2026 (validação feita com a conta do João, convertida para profissional):
+
+- [x] Login por e-mail ou Google funciona na Vercel.
 - [ ] Upload de foto e vídeo grava no R2 (ver objetos no painel do Cloudflare).
-- [ ] "Conectar Instagram" redireciona para a Meta e volta com "Conectado como @…".
-- [ ] Tela 01 com o @ do Samuel carrega cabeçalho e posts com miniaturas.
-- [ ] Tela 01 com outra conta profissional pública (ex.: uma marca) carrega via Business Discovery.
-- [ ] Tela 01 com uma conta pessoal mostra o aviso e oferece importação manual.
+- [x] "Conectar Instagram" redireciona para a Meta e volta com "Conectado como @…" (Login do
+      Instagram, `@joaomoreiraj`).
+- [x] Tela 01 com a conta conectada carrega cabeçalho e posts com miniaturas (6 posts).
+- [ ] ~~Tela 01 com outra conta profissional pública via Business Discovery~~ — fora do modelo
+      (ADR-009): o APROVO mostra só contas conectadas.
+- [ ] Tela 01 com conta não conectada mostra a mensagem e oferece importação manual.
 - [ ] Link de aprovação abre sem login no celular do cliente e a decisão aparece em tempo real.
+- [ ] Samuel conecta `@samuelbozzuto` (profissional) no workspace dele e vê o próprio feed.

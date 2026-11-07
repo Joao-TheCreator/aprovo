@@ -109,8 +109,10 @@ desligado por padrão, e só ligar com decisão do João (idealmente com parecer
 | Scraping gerenciado | Quase qualquer conta pública | ~US$ 1–3 / 1.000 | Alto (ToS, quebras, LGPD) | Baixo integrar, alto manter |
 | Importação manual | Qualquer conta | Zero | Nenhum | Baixo |
 
-**Decisão (ADR-003):** Business Discovery como principal; importação manual sempre disponível;
-scraping atrás de flag; OAuth + publicação só na fase de publicação.
+**Decisão (ADR-003, revista pela ADR-009 em 06/11/2026):** o APROVO mostra só os feeds das
+contas conectadas por OAuth (Login do Instagram); Business Discovery deixou de ser o caminho
+principal; importação manual sempre disponível; scraping atrás de flag; publicação na fase
+seguinte, com o token da própria conta conectada.
 
 ## Interface do provedor (para implementação)
 

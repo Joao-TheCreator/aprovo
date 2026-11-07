@@ -107,6 +107,33 @@ provedor de scraping (ADR-003: desligado por decisão do João).
 **Consequências:** cada social media precisa de uma Página do Facebook ligada ao Instagram
 profissional dela (gratuito, feito no Instagram em Configurações › Contas vinculadas). App
 Review passa a cobrir `instagram_basic` e `pages_*` quando sair do modo de desenvolvimento.
+**Revisão em 06/11/2026 (ADR-009):** o Login do Facebook foi implementado e validado até a
+concessão de ativos, mas deixou de ser o padrão; fica disponível com `META_OAUTH_PROVIDER=facebook`.
+
+### ADR-009 · Feeds só de contas conectadas; Login do Instagram como padrão (06/11/2026)
+**Contexto:** ao validar o Login do Facebook em produção ficou claro o atrito do modelo
+"digitar o @ de qualquer conta": Página do Facebook obrigatória, seleção de ativos no diálogo,
+App Review de permissões de Página. Ao mesmo tempo, o João definiu que o APROVO vai **publicar
+sozinho** no feed do cliente após a aprovação, na data e hora marcadas, o que exige de qualquer
+forma a autorização da conta do cliente.
+**Decisão do João:** o APROVO mostra só os feeds das contas que a pessoa conectou com login.
+Esse é o padrão; Business Discovery deixa de ser necessário.
+**Como fazemos:**
+- Login do Instagram (`graph.instagram.com`, `instagram_business_basic`) é o padrão
+  (`META_OAUTH_PROVIDER=instagram`). Não exige Página do Facebook. Login do Facebook continua
+  implementado como opção.
+- Um workspace passa a ter **várias conexões**, uma por conta do Instagram (hoje é uma por
+  workspace). Cada conta conectada vira um perfil (Tela 00) automaticamente; "Conectar perfil"
+  passa a ser "Conectar conta do Instagram". A importação manual continua como exceção.
+- O feed de cada perfil vem de `/me` e `/me/media` com o token daquela conta.
+- Publicação automática após aprovação (fase seguinte): escopo
+  `instagram_business_content_publish`, agendador no servidor (cron + fila), e App Review
+  antes de abrir para contas sem papel no app.
+**Alternativas descartadas:** Business Discovery com conta ponte (ADR-003; limitado a contas
+profissionais públicas e sem caminho para publicar); scraping (ADR-003).
+**Consequências:** o cliente (ou a social media com acesso à conta) autoriza o app uma vez por
+conta; contas pessoais não conectam (limitação da Meta). A conta ponte deixa de existir.
+Pendente de implementação: conexões múltiplas, perfil a partir da conexão, publicação.
 
 ## Riscos
 

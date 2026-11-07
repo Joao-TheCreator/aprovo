@@ -46,10 +46,13 @@ export function isOAuthConfigured(): boolean {
   return isFacebookOAuthConfigured() || isInstagramLoginConfigured();
 }
 
-/** Provider used for new connections. Facebook always wins when configured. */
+/** Provider used for new connections (see META_OAUTH_PROVIDER). */
 export function activeOAuthProvider(): ConnectionProvider | null {
-  if (isFacebookOAuthConfigured()) return "facebook";
+  // ADR-009: Instagram Login is the default; Facebook Login only when explicitly selected.
+  const preferred = process.env.META_OAUTH_PROVIDER === "facebook" ? "facebook" : "instagram";
+  if (preferred === "facebook" && isFacebookOAuthConfigured()) return "facebook";
   if (isInstagramLoginConfigured()) return "instagram";
+  if (isFacebookOAuthConfigured()) return "facebook";
   return null;
 }
 
