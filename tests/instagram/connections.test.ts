@@ -129,14 +129,14 @@ describe("disconnectInstagram", () => {
     const other = await seedWorkspace("b@x.co");
     mocks.user.id = mine.user.id;
     const theirs = await connect(other.ws.id, other.user.id, B);
-    await expect(disconnectInstagram(theirs.id)).rejects.toThrow(/NEXT_NOT_FOUND/);
+    await expect(disconnectInstagram(theirs.id)).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404/);
     expect(await getConnectionById(theirs.id, other.ws.id)).not.toBeNull();
   });
 
   it("rejects ids that are not uuids", async () => {
     const s = await seedWorkspace();
     mocks.user.id = s.user.id;
-    await expect(disconnectInstagram("nope")).rejects.toThrow(/NEXT_NOT_FOUND/);
+    await expect(disconnectInstagram("nope")).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404/);
   });
 });
 

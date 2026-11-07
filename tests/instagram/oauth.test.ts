@@ -157,11 +157,14 @@ describe("authorize url and state", () => {
 });
 
 describe("facebook authorize url", () => {
-  it("prefers Facebook as the active provider when configured", () => {
+  it("defaults to Instagram Login; Facebook only when selected or the only one configured (ADR-009)", () => {
+    expect(activeOAuthProvider()).toBe("instagram");
+    process.env.META_OAUTH_PROVIDER = "facebook";
+    expect(activeOAuthProvider()).toBe("facebook");
+    delete process.env.META_OAUTH_PROVIDER;
+    delete process.env.META_APP_ID;
     expect(activeOAuthProvider()).toBe("facebook");
     delete process.env.META_FB_APP_ID;
-    expect(activeOAuthProvider()).toBe("instagram");
-    delete process.env.META_APP_ID;
     expect(activeOAuthProvider()).toBeNull();
   });
 
