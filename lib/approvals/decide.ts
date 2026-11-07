@@ -43,14 +43,22 @@ export async function resolveLink(
 > {
   if (!token || token.length > 200) return { state: "not_found" };
   const [row] = await db
-    .select({ link: approvalLinks, request: approvalRequests })
+    .select({
+      link: approvalLinks,
+      request: approvalRequests,
+      profileDeletedAt: profiles.deletedAt,
+    })
     .from(approvalLinks)
     .innerJoin(approvalRequests, eq(approvalRequests.id, approvalLinks.requestId))
+    .innerJoin(profiles, eq(profiles.id, approvalRequests.profileId))
     .where(eq(approvalLinks.tokenHash, hashToken(token)))
     .limit(1);
   if (!row) return { state: "not_found" };
   const { link, request } = row;
-  if (link.revokedAt || request.status === "revoked") return { state: "revoked", link, request };
+  // A removed (soft-deleted) profile behaves as a revoked link.
+  if (link.revokedAt || request.status === "revoked" || row.profileDeletedAt) {
+    return { state: "revoked", link, request };
+  }
   if (link.usedAt) return { state: "used", link, request };
   if (link.expiresAt.getTime() <= Date.now()) return { state: "expired", link, request };
   return { state: "active", link, request };

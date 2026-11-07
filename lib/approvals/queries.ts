@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   approvalDecisions,
@@ -447,8 +447,12 @@ export async function listApprovalRequests(profileId?: string): Promise<Approval
     .innerJoin(profiles, eq(profiles.id, approvalRequests.profileId))
     .where(
       profileId
-        ? and(eq(profiles.workspaceId, workspaceId), eq(profiles.id, profileId))
-        : eq(profiles.workspaceId, workspaceId),
+        ? and(
+            eq(profiles.workspaceId, workspaceId),
+            eq(profiles.id, profileId),
+            isNull(profiles.deletedAt),
+          )
+        : and(eq(profiles.workspaceId, workspaceId), isNull(profiles.deletedAt)),
     )
     .orderBy(desc(approvalRequests.createdAt));
   return summarize(rows);

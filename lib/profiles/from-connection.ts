@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { profiles, type InstagramConnection } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import type { AccountType } from "./contracts";
 import { importProfileFromProvider } from "./import";
 
@@ -21,7 +22,8 @@ export type ProfileFromConnection = { profileId: string; created: boolean };
 
 /**
  * Finds (by workspace + ig_username, case-insensitive through citext) or creates the profile of
- * a connected account and links it through profiles.connection_id. A reconnect re-links.
+ * a connected account and links it through profiles.connection_id. A reconnect re-links and
+ * restores a soft-deleted profile.
  */
 export async function findOrCreateProfileForConnection(
   connection: Pick<InstagramConnection, "id" | "workspaceId" | "username" | "accountType">,
@@ -29,7 +31,11 @@ export async function findOrCreateProfileForConnection(
   const accountType = mapConnectionAccountType(connection.accountType);
   return db.transaction(async (tx) => {
     const [existing] = await tx
-      .select({ id: profiles.id, accountType: profiles.accountType })
+      .select({
+        id: profiles.id,
+        accountType: profiles.accountType,
+        deletedAt: profiles.deletedAt,
+      })
       .from(profiles)
       .where(
         and(
@@ -45,12 +51,22 @@ export async function findOrCreateProfileForConnection(
         .update(profiles)
         .set({
           connectionId: connection.id,
+          // A soft-deleted profile with the same @ comes back (the unique index forces restore).
+          ...(existing.deletedAt ? { deletedAt: null } : {}),
           ...(existing.accountType === "unknown" && accountType !== "unknown"
             ? { accountType }
             : {}),
           updatedAt: new Date(),
         })
         .where(eq(profiles.id, existing.id));
+      if (existing.deletedAt) {
+        await logActivity(tx, {
+          profileId: existing.id,
+          actor: "system:reconnect",
+          event: "profile.restored",
+          payload: { via: "instagram_connection", connectionId: connection.id },
+        });
+      }
       return { profileId: existing.id, created: false };
     }
 

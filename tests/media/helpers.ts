@@ -26,7 +26,7 @@ export async function seedWorkspace(email = "a@x.co") {
 
 /** Mock factory for lib/auth/require backed by the test DB; `mocks.user.id` selects the actor. */
 export async function makeRequireMock(mocks: { user: { id: string } }) {
-  const { eq } = await import("drizzle-orm");
+  const { and, eq, isNull } = await import("drizzle-orm");
   const { notFound } = await import("next/navigation");
   const { db } = await import("@/db/client");
   const schema = await import("@/db/schema");
@@ -43,7 +43,7 @@ export async function makeRequireMock(mocks: { user: { id: string } }) {
       const [profile] = await db
         .select()
         .from(schema.profiles)
-        .where(eq(schema.profiles.id, profileId))
+        .where(and(eq(schema.profiles.id, profileId), isNull(schema.profiles.deletedAt)))
         .limit(1);
       if (!profile) notFound();
       const m = await requireWorkspaceMember(profile.workspaceId);

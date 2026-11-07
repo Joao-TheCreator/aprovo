@@ -23,6 +23,10 @@ export async function claimDue(limit: number, runId: string): Promise<Publicatio
     with due as (
       select id from publications
       where status = 'scheduled'
+        and not exists (
+          select 1 from profiles pr
+          where pr.id = publications.profile_id and pr.deleted_at is not null
+        )
         and next_attempt_at <= now()
         and (locked_at is null or locked_at < now() - make_interval(mins => ${LOCK_TIMEOUT_MINUTES}))
       order by next_attempt_at

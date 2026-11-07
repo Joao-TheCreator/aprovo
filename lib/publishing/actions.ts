@@ -1,6 +1,6 @@
 "use server";
 /** Schedule, reschedule and cancel Instagram publications (docs/12 sections 2.2, 4.2, 4.7, 5.5). */
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
 import { z } from "zod";
@@ -391,6 +391,7 @@ export async function rescheduleFailedForConnection(
         and(
           eq(publications.connectionId, parsed.data),
           eq(profiles.workspaceId, member.workspaceId),
+          isNull(profiles.deletedAt),
           eq(publications.status, "failed"),
           inArray(publications.lastErrorCode, [...ACCOUNT_ERROR_CODES]),
         ),

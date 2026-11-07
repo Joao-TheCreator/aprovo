@@ -7,7 +7,7 @@
  * - requireWorkspaceForProfile(profileId): profile -> workspace -> membership check
  * Every Drizzle query on tenant data must be filtered by the workspace id returned here.
  */
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/db/client";
 import { profiles } from "@/db/schema";
@@ -40,7 +40,11 @@ export async function requireWorkspaceForProfile(
   profileId: string,
   opts: { roles?: MemberRole[] } = {},
 ) {
-  const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
+  const [profile] = await db
+    .select()
+    .from(profiles)
+    .where(and(eq(profiles.id, profileId), isNull(profiles.deletedAt)))
+    .limit(1);
   if (!profile) notFound();
   const member = await requireWorkspaceMember(profile.workspaceId, opts);
   return { ...member, profile };

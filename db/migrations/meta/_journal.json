@@ -64,6 +64,13 @@
       "when": 1794022372729,
       "tag": "0008_fluffy_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794057260240,
+      "tag": "0009_chief_hammerhead",
+      "breakpoints": true
     }
   ]
 }

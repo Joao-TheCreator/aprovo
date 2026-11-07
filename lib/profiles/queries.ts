@@ -47,7 +47,7 @@ export async function listProfiles(): Promise<ProfileListItem[]> {
     .select({ profile: profiles, avatarPath: mediaAssets.thumbPath })
     .from(profiles)
     .leftJoin(mediaAssets, eq(mediaAssets.id, profiles.avatarAssetId))
-    .where(eq(profiles.workspaceId, ws.id))
+    .where(and(eq(profiles.workspaceId, ws.id), isNull(profiles.deletedAt)))
     .orderBy(desc(profiles.createdAt));
   if (rows.length === 0) return [];
 

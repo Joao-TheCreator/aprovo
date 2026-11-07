@@ -31,7 +31,11 @@ async function signedUrls(keys: (string | null | undefined)[]): Promise<(string 
 }
 
 export async function buildProfileFeed(profileId: string): Promise<ProfileFeed | null> {
-  const [p] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
+  const [p] = await db
+    .select()
+    .from(profiles)
+    .where(and(eq(profiles.id, profileId), isNull(profiles.deletedAt)))
+    .limit(1);
   if (!p) return null;
 
   const [connection] = p.connectionId

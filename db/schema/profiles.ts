@@ -43,6 +43,12 @@ export const profiles = pgTable(
       onDelete: "set null",
     }),
     timezone: text("timezone").notNull().default("America/Sao_Paulo"),
+    /**
+     * Soft delete: set when the profile has approval decisions (audit rows that cannot be
+     * cascaded). A soft-deleted profile behaves as non-existent everywhere; reconnecting the same
+     * @ restores it.
+     */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [

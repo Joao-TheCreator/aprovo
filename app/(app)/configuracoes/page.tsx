@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   CircleAlert,
   CircleCheck,
@@ -182,7 +182,13 @@ export default async function ConfiguracoesPage({
     ? await db
         .select({ id: profiles.id, connectionId: profiles.connectionId })
         .from(profiles)
-        .where(and(eq(profiles.workspaceId, ws.id), isNotNull(profiles.connectionId)))
+        .where(
+          and(
+            eq(profiles.workspaceId, ws.id),
+            isNotNull(profiles.connectionId),
+            isNull(profiles.deletedAt),
+          ),
+        )
     : [];
   const profileByConnection = new Map(linked.map((p) => [p.connectionId, p.id]));
   // Daily publishing quota per publish-capable account (cached 10 min; null when unavailable).

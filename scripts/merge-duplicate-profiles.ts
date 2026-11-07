@@ -82,7 +82,10 @@ async function main() {
 
     const byWs = new Map<string, (typeof profiles.$inferSelect)[]>();
     for (const m of memberships) {
-      const ps = await db.select().from(profiles).where(eq(profiles.workspaceId, m.ws.id));
+      const ps = await db
+        .select()
+        .from(profiles)
+        .where(and(eq(profiles.workspaceId, m.ws.id), isNull(profiles.deletedAt)));
       byWs.set(m.ws.id, ps);
       const tag = m.ws.id === current?.id ? "  <- ATUAL" : m.ws.deletedAt ? "  (excluido)" : "";
       console.log(

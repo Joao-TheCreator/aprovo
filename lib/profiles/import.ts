@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { importedPosts, profiles, profileSnapshots } from "@/db/schema";
 import { downloadImage } from "@/lib/instagram/download";
@@ -74,7 +74,11 @@ async function failImport(profileId: string, error: IgError): Promise<ImportResu
  * Callers must have authorized access to the profile already.
  */
 export async function importProfileFromProvider(profileId: string): Promise<ImportResult> {
-  const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
+  const [profile] = await db
+    .select()
+    .from(profiles)
+    .where(and(eq(profiles.id, profileId), isNull(profiles.deletedAt)))
+    .limit(1);
   if (!profile) return { ok: false, error: { code: "not_found" } };
 
   await db

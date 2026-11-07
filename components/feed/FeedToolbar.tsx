@@ -140,7 +140,11 @@ export function FeedToolbar({
     startTransition(async () => {
       const res = await removeProfile(profileId);
       if (res.ok) {
-        toast.success("Perfil removido");
+        toast.success(
+          res.data.mode === "soft"
+            ? "Perfil removido. O histórico de aprovações fica guardado."
+            : "Perfil removido",
+        );
         router.push("/perfis");
       } else {
         toast.error(res.message);
@@ -227,7 +231,8 @@ export function FeedToolbar({
           <DialogHeader>
             <DialogTitle>Remover perfil?</DialogTitle>
             <DialogDescription>
-              O perfil e o feed importado deixam de aparecer neste workspace.
+              O perfil e o feed importado deixam de aparecer neste workspace. Se já houver decisões
+              de aprovação de clientes, o histórico delas fica guardado.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

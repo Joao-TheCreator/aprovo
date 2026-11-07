@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { approvalDecisions, mediaAssets, postMedia, posts, profiles } from "@/db/schema";
 import { requireWorkspaceMember } from "@/lib/auth/require";
@@ -19,7 +19,7 @@ export async function getPost(postId: string): Promise<PostDetail | null> {
   const [profile] = await db
     .select()
     .from(profiles)
-    .where(eq(profiles.id, post.profileId))
+    .where(and(eq(profiles.id, post.profileId), isNull(profiles.deletedAt)))
     .limit(1);
   if (!profile) return null;
   try {
@@ -59,7 +59,10 @@ export async function getPost(postId: string): Promise<PostDetail | null> {
       .select({ comment: approvalDecisions.comment })
       .from(approvalDecisions)
       .where(
-        and(eq(approvalDecisions.postId, postId), eq(approvalDecisions.decision, "changes_requested")),
+        and(
+          eq(approvalDecisions.postId, postId),
+          eq(approvalDecisions.decision, "changes_requested"),
+        ),
       )
       .orderBy(desc(approvalDecisions.decidedAt))
       .limit(1);

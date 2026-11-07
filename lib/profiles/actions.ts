@@ -3,10 +3,19 @@
  * Server Actions for profiles (Phase 1). Signatures are the contract in ./contracts.
  * Every action authenticates and scopes by workspace.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
-import { importedPosts, mediaAssets, profiles } from "@/db/schema";
+import {
+  approvalDecisions,
+  approvalLinks,
+  approvalRequests,
+  importedPosts,
+  mediaAssets,
+  posts,
+  profiles,
+  publications,
+} from "@/db/schema";
 import { logActivity } from "@/lib/activity/log";
 import { getCurrentWorkspace, requireUser, requireWorkspaceForProfile } from "@/lib/auth/require";
 import type { IgError } from "@/lib/instagram/types";
@@ -52,7 +61,8 @@ function fail(code: ConnectErrorCode, profileId?: string, message?: string): Con
 }
 
 type Prepared =
-  { ok: true; workspaceId: string; username: string } | { ok: false; result: ConnectProfileResult };
+  | { ok: true; workspaceId: string; username: string; restoredId: string | null }
+  | { ok: false; result: ConnectProfileResult };
 
 /** Shared validation: auth, username format, uniqueness within the workspace. */
 async function prepareConnect(input: { username: string }): Promise<Prepared> {
@@ -63,23 +73,45 @@ async function prepareConnect(input: { username: string }): Promise<Prepared> {
   if (!parsed.success) return { ok: false, result: fail("invalid_username") };
   const username = parsed.data;
   const [dup] = await db
-    .select({ id: profiles.id })
+    .select({ id: profiles.id, deletedAt: profiles.deletedAt })
     .from(profiles)
     .where(and(eq(profiles.workspaceId, workspace.id), eq(profiles.igUsername, username)))
     .limit(1);
-  if (dup) return { ok: false, result: fail("already_connected", dup.id) };
-  return { ok: true, workspaceId: workspace.id, username };
+  if (dup && !dup.deletedAt) return { ok: false, result: fail("already_connected", dup.id) };
+  if (dup) {
+    // Removed profile kept for the approval history: the unique @ forces restoring it.
+    await db.transaction(async (tx) => {
+      await tx
+        .update(profiles)
+        .set({ deletedAt: null, updatedAt: new Date() })
+        .where(eq(profiles.id, dup.id));
+      await logActivity(tx, {
+        profileId: dup.id,
+        actor: `user:${user.id}`,
+        event: "profile.restored",
+        payload: { via: "manual_connect" },
+      });
+    });
+    return { ok: true, workspaceId: workspace.id, username, restoredId: dup.id };
+  }
+  return { ok: true, workspaceId: workspace.id, username, restoredId: null };
 }
 
 /** Tela 01: connect by @ and try the automatic import. */
 export async function connectProfile(input: { username: string }): Promise<ConnectProfileResult> {
   const prep = await prepareConnect(input);
   if (!prep.ok) return prep.result;
-  const [created] = await db
-    .insert(profiles)
-    .values({ workspaceId: prep.workspaceId, igUsername: prep.username, importStatus: "importing" })
-    .onConflictDoNothing()
-    .returning({ id: profiles.id });
+  const [created] = prep.restoredId
+    ? [{ id: prep.restoredId }]
+    : await db
+        .insert(profiles)
+        .values({
+          workspaceId: prep.workspaceId,
+          igUsername: prep.username,
+          importStatus: "importing",
+        })
+        .onConflictDoNothing()
+        .returning({ id: profiles.id });
   if (!created) return fail("already_connected");
 
   const res = await importProfileFromProvider(created.id);
@@ -94,16 +126,18 @@ export async function createProfileWithoutFeed(input: {
 }): Promise<ConnectProfileResult> {
   const prep = await prepareConnect(input);
   if (!prep.ok) return prep.result;
-  const [created] = await db
-    .insert(profiles)
-    .values({
-      workspaceId: prep.workspaceId,
-      igUsername: prep.username,
-      importStatus: "idle",
-      importSource: null,
-    })
-    .onConflictDoNothing()
-    .returning({ id: profiles.id });
+  const [created] = prep.restoredId
+    ? [{ id: prep.restoredId }]
+    : await db
+        .insert(profiles)
+        .values({
+          workspaceId: prep.workspaceId,
+          igUsername: prep.username,
+          importStatus: "idle",
+          importSource: null,
+        })
+        .onConflictDoNothing()
+        .returning({ id: profiles.id });
   if (!created) return fail("already_connected");
   revalidate(created.id);
   return { ok: true, profileId: created.id, imported: 0, source: "none" };
@@ -253,9 +287,83 @@ export async function setImportedPostHidden(
   return { ok: true, data: undefined };
 }
 
-export async function removeProfile(profileId: string): Promise<ActionResult> {
-  await requireWorkspaceForProfile(profileId, { roles: ["owner"] });
-  await db.delete(profiles).where(eq(profiles.id, profileId));
+export type RemoveProfileMode = "soft" | "hard";
+
+/**
+ * Removes a profile. Approval decisions are an audit table (kept for 5 years, no cascade), so a
+ * profile that has any is soft-deleted (`deleted_at`) and behaves as non-existent; otherwise it is
+ * hard-deleted and everything cascades.
+ */
+export async function removeProfile(
+  profileId: string,
+): Promise<ActionResult<{ mode: RemoveProfileMode }>> {
+  const { user } = await requireWorkspaceForProfile(profileId, { roles: ["owner"] });
+  const actor = `user:${user.id}` as const;
+
+  const [decided] = await db
+    .select({ id: approvalDecisions.id })
+    .from(approvalDecisions)
+    .innerJoin(approvalRequests, eq(approvalRequests.id, approvalDecisions.requestId))
+    .where(eq(approvalRequests.profileId, profileId))
+    .limit(1);
+
+  if (!decided) {
+    await db.delete(profiles).where(eq(profiles.id, profileId));
+    revalidate();
+    return { ok: true, data: { mode: "hard" } };
+  }
+
+  await db.transaction(async (tx) => {
+    const now = new Date();
+    // Live publications are cancelled and their posts go back to draft.
+    const cancelled = await tx
+      .update(publications)
+      .set({ status: "cancelled", cancelledAt: now, cancelledBy: user.id, updatedAt: now })
+      .where(
+        and(
+          eq(publications.profileId, profileId),
+          sql`${publications.status} in ('scheduled', 'publishing')`,
+        ),
+      )
+      .returning({ postId: publications.postId });
+    if (cancelled.length > 0) {
+      await tx
+        .update(posts)
+        .set({ status: "draft", updatedAt: now })
+        .where(
+          inArray(
+            posts.id,
+            cancelled.map((c) => c.postId),
+          ),
+        );
+    }
+    // Open approval links stop working.
+    await tx
+      .update(approvalLinks)
+      .set({ revokedAt: now, updatedAt: now })
+      .where(
+        and(
+          isNull(approvalLinks.revokedAt),
+          inArray(
+            approvalLinks.requestId,
+            tx
+              .select({ id: approvalRequests.id })
+              .from(approvalRequests)
+              .where(eq(approvalRequests.profileId, profileId)),
+          ),
+        ),
+      );
+    await tx
+      .update(profiles)
+      .set({ deletedAt: now, connectionId: null, updatedAt: now })
+      .where(eq(profiles.id, profileId));
+    await logActivity(tx, {
+      profileId,
+      actor,
+      event: "profile.removed",
+      payload: { mode: "soft", cancelledPublications: cancelled.length },
+    });
+  });
   revalidate();
-  return { ok: true, data: undefined };
+  return { ok: true, data: { mode: "soft" } };
 }
