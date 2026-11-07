@@ -1,0 +1,2 @@
+DROP INDEX "instagram_connections_workspace_uq";--> statement-breakpoint
+CREATE UNIQUE INDEX "instagram_connections_workspace_ig_user_uq" ON "instagram_connections" USING btree ("workspace_id","ig_user_id");

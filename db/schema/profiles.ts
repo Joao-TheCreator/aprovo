@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { citext, id, timestamps } from "./columns";
 import { accountType, gridRatio, importSource, importStatus, importedMediaType } from "./enums";
+import { instagramConnections } from "./instagram";
 import { mediaAssets } from "./media";
 import { workspaces } from "./workspaces";
 
@@ -37,9 +38,17 @@ export const profiles = pgTable(
     importStatus: importStatus("import_status").notNull().default("idle"),
     importError: text("import_error"),
     gridRatio: gridRatio("grid_ratio").notNull().default("3:4"),
+    /** Connected Instagram account that feeds this profile (null = manual or legacy profile). */
+    connectionId: uuid("connection_id").references(() => instagramConnections.id, {
+      onDelete: "set null",
+    }),
+    timezone: text("timezone").notNull().default("America/Sao_Paulo"),
     ...timestamps,
   },
-  (t) => [uniqueIndex("profiles_workspace_ig_username_uniq").on(t.workspaceId, t.igUsername)],
+  (t) => [
+    uniqueIndex("profiles_workspace_ig_username_uniq").on(t.workspaceId, t.igUsername),
+    index("profiles_connection_idx").on(t.connectionId),
+  ],
 );
 
 export const profileSnapshots = pgTable(

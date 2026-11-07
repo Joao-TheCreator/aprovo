@@ -1,14 +1,14 @@
+import { and, eq, isNotNull } from "drizzle-orm";
 import Link from "next/link";
 
+import { db } from "@/db/client";
+import { profiles } from "@/db/schema";
 import { PhoneFrame } from "@/components/app/PhoneFrame";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCurrentWorkspace, requireUser } from "@/lib/auth/require";
-import {
-  activeOAuthProvider,
-  getWorkspaceConnection,
-  isOAuthConfigured,
-} from "@/lib/instagram/oauth";
+import { activeOAuthProvider, listConnections, isOAuthConfigured } from "@/lib/instagram/oauth";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import { DisconnectButton } from "./DisconnectButton";
 
@@ -23,6 +23,8 @@ const ERRORS: Record<string, string> = {
   no_instagram_page:
     "Nenhuma Página do Facebook ligada a uma conta profissional do Instagram foi encontrada. No Instagram, vá em Configurações › Contas vinculadas e vincule uma Página do Facebook, depois tente de novo.",
 };
+
+const PUBLISH_SCOPE = "instagram_business_content_publish";
 
 function formatDate(d: Date) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(d);
@@ -48,10 +50,17 @@ export default async function ConfiguracoesPage({
   const sp = await searchParams;
   const user = await requireUser();
   const ws = await getCurrentWorkspace(user.id!);
-  const connection = ws ? await getWorkspaceConnection(ws.id) : null;
+  const connections = ws ? await listConnections(ws.id) : [];
+  // One query for the "Ver perfil" links (profiles.connection_id), scoped by workspace.
+  const linked = ws
+    ? await db
+        .select({ id: profiles.id, connectionId: profiles.connectionId })
+        .from(profiles)
+        .where(and(eq(profiles.workspaceId, ws.id), isNotNull(profiles.connectionId)))
+    : [];
+  const profileByConnection = new Map(linked.map((p) => [p.connectionId, p.id]));
   const configured = isOAuthConfigured();
   const activeProvider = activeOAuthProvider();
-  const legacyConnection = connection?.provider === "instagram" && activeProvider === "facebook";
   const error = sp.error ? (ERRORS[sp.error] ?? ERRORS.exchange_failed) : null;
 
   return (
@@ -76,37 +85,64 @@ export default async function ConfiguracoesPage({
 
       <section className="bg-card border-border flex flex-col gap-4 rounded-2xl border p-4">
         <h2 className="text-lg leading-6 font-semibold">Instagram</h2>
-        {connection ? (
+        {connections.length > 0 ? (
           <>
-            <div className="flex items-center gap-3">
-              <Avatar className="size-12">
-                {connection.profilePictureUrl ? (
-                  <AvatarImage src={connection.profilePictureUrl} alt="" />
-                ) : null}
-                <AvatarFallback>{connection.username.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="truncate font-semibold">
-                  Conectado como @{connection.username} ({accountTypeLabel(connection.accountType)})
-                </p>
-                <p className="text-muted-foreground text-sm">
-                  Token válido até {formatDate(connection.tokenExpiresAt)}
-                </p>
-              </div>
-            </div>
-            {legacyConnection ? (
-              <p role="status" className="bg-secondary rounded-xl px-4 py-3 text-sm">
-                Esta conexão usa o Login do Instagram. Este servidor está configurado para o Login
-                do Facebook; reconecte para usar o mesmo login.
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-3">
-              <Button asChild variant="secondary">
-                {/* API route (redirect to Instagram), not a page: plain anchor is intended. */}
-                <a href="/api/instagram/connect">Reconectar</a>
+            <ul className="flex flex-col gap-4">
+              {connections.map((c) => {
+                const profileId = profileByConnection.get(c.id);
+                const canPublish = c.scopes.includes(PUBLISH_SCOPE);
+                const legacy = c.provider === "instagram" && activeProvider === "facebook";
+                return (
+                  <li
+                    key={c.id}
+                    className="border-border flex flex-col gap-3 rounded-xl border p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="size-12">
+                        {c.profilePictureUrl ? (
+                          <AvatarImage src={c.profilePictureUrl} alt="" />
+                        ) : null}
+                        <AvatarFallback>{c.username.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">@{c.username}</p>
+                        <p className="text-muted-foreground text-sm">
+                          {accountTypeLabel(c.accountType)} · token válido até{" "}
+                          {formatDate(c.tokenExpiresAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">Feed</Badge>
+                      {canPublish ? <Badge variant="secondary">Publicação</Badge> : null}
+                    </div>
+                    {legacy ? (
+                      <p role="status" className="bg-secondary rounded-xl px-4 py-3 text-sm">
+                        Esta conexão usa o Login do Instagram. Este servidor está configurado para o
+                        Login do Facebook; reconecte para usar o mesmo login.
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-3">
+                      <Button asChild variant="secondary">
+                        {/* API route (redirect to Instagram), not a page: plain anchor is intended. */}
+                        <a href="/api/instagram/connect">Reconectar</a>
+                      </Button>
+                      {profileId ? (
+                        <Button asChild variant="outline">
+                          <Link href={`/perfis/${profileId}`}>Ver perfil</Link>
+                        </Button>
+                      ) : null}
+                      <DisconnectButton connectionId={c.id} username={c.username} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {configured ? (
+              <Button asChild variant="outline" className="self-start">
+                <a href="/api/instagram/connect">Conectar outra conta do Instagram</a>
               </Button>
-              <DisconnectButton username={connection.username} />
-            </div>
+            ) : null}
           </>
         ) : (
           <>

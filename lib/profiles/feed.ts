@@ -138,6 +138,7 @@ export async function buildProfileFeed(profileId: string): Promise<ProfileFeed |
       importError: p.importError,
       lastImportedAt: p.lastImportedAt,
       gridRatio: p.gridRatio,
+      connectionId: p.connectionId,
     },
     items,
     canRefresh: await isGraphConfiguredForWorkspace(p.workspaceId),

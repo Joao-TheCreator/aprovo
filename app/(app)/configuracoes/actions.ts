@@ -1,20 +1,32 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
 import { db } from "@/db/client";
 import { instagramConnections } from "@/db/schema";
 import { getCurrentWorkspace, requireUser, requireWorkspaceMember } from "@/lib/auth/require";
 import { deleteAccount } from "@/lib/account/delete";
 import { signOut } from "@/lib/auth";
 
-export async function disconnectInstagram(): Promise<void> {
+const connectionIdSchema = z.string().uuid();
+
+/** Disconnects one Instagram account; a connection of another workspace is a 404. */
+export async function disconnectInstagram(connectionId: string): Promise<void> {
+  const parsed = connectionIdSchema.safeParse(connectionId);
+  if (!parsed.success) notFound();
   const user = await requireUser();
   const ws = await getCurrentWorkspace(user.id!);
-  if (!ws) return;
+  if (!ws) notFound();
   await requireWorkspaceMember(ws.id);
-  await db.delete(instagramConnections).where(eq(instagramConnections.workspaceId, ws.id));
+  const deleted = await db
+    .delete(instagramConnections)
+    .where(
+      and(eq(instagramConnections.id, parsed.data), eq(instagramConnections.workspaceId, ws.id)),
+    )
+    .returning({ id: instagramConnections.id });
+  if (deleted.length === 0) notFound();
   revalidatePath("/configuracoes");
   redirect("/configuracoes?disconnected=1");
 }

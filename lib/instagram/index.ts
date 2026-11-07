@@ -1,5 +1,6 @@
 import { FACEBOOK_GRAPH_HOST, GraphBusinessDiscoveryProvider, INSTAGRAM_GRAPH_HOST } from "./graph";
-import { decryptToken, getWorkspaceConnection, refreshIfNeeded } from "./oauth";
+import { decryptToken, getConnectionById, listConnections, refreshIfNeeded } from "./oauth";
+import type { InstagramConnection } from "@/db/schema";
 import type { IgError, IgMediaPage, IgProfile, InstagramProvider } from "./types";
 
 export * from "./types";
@@ -20,7 +21,7 @@ export function isGraphConfigured(): boolean {
 
 export async function isGraphConfiguredForWorkspace(workspaceId: string): Promise<boolean> {
   if (isGraphConfigured()) return true;
-  return !!(await getWorkspaceConnection(workspaceId));
+  return (await listConnections(workspaceId)).length > 0;
 }
 
 function envProvider(): InstagramProvider {
@@ -41,11 +42,10 @@ export function getInstagramProvider(): InstagramProvider {
   return envProvider();
 }
 
-/** Order: workspace OAuth connection, then env bridge token, then not configured. */
-export async function getInstagramProviderForWorkspace(
-  workspaceId: string,
+/** Provider for one stored connection; falls back to the env bridge token if it is unusable. */
+export async function getInstagramProviderForConnection(
+  stored: InstagramConnection | null,
 ): Promise<InstagramProvider> {
-  const stored = await getWorkspaceConnection(workspaceId);
   if (stored) {
     try {
       const connection = await refreshIfNeeded(stored);
@@ -60,4 +60,26 @@ export async function getInstagramProviderForWorkspace(
     }
   }
   return envProvider();
+}
+
+/**
+ * Provider for a profile. A profile linked to a connection (profiles.connection_id) always uses
+ * that connection's token. Legacy profiles without connection_id (manual profiles and profiles
+ * created before ADR-009) fall back to the workspace connection whose username matches the
+ * profile's ig_username (case-insensitive), else the first (oldest) connection. Then env, then
+ * not configured.
+ */
+export async function getInstagramProviderForProfile(profile: {
+  workspaceId: string;
+  igUsername: string;
+  connectionId: string | null;
+}): Promise<InstagramProvider> {
+  if (profile.connectionId) {
+    const linked = await getConnectionById(profile.connectionId, profile.workspaceId);
+    if (linked) return getInstagramProviderForConnection(linked);
+  }
+  const connections = await listConnections(profile.workspaceId);
+  const wanted = profile.igUsername.toLowerCase();
+  const chosen = connections.find((c) => c.username.toLowerCase() === wanted) ?? connections[0];
+  return getInstagramProviderForConnection(chosen ?? null);
 }

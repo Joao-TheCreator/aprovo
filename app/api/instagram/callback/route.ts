@@ -9,6 +9,7 @@ import {
   isOAuthConfigured,
   statesMatch,
 } from "@/lib/instagram/oauth";
+import { createProfileAndImport } from "@/lib/profiles/from-connection";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +43,9 @@ export async function GET(req: NextRequest) {
   const ws = await getCurrentWorkspace(user.id!);
   if (!ws) return back("error=exchange_failed");
 
+  let connection;
   try {
-    await completeOAuth({ code, workspaceId: ws.id, userId: user.id!, provider });
+    connection = await completeOAuth({ code, workspaceId: ws.id, userId: user.id!, provider });
   } catch (e) {
     if (e instanceof OAuthError && e.code === "no_instagram_page") {
       return back("error=no_instagram_page");
@@ -54,5 +56,16 @@ export async function GET(req: NextRequest) {
     );
     return back("error=exchange_failed");
   }
-  return back("connected=1");
+
+  // ADR-009: every connected account becomes a profile, imported with its own token.
+  try {
+    const { profileId } = await createProfileAndImport(connection);
+    const res = NextResponse.redirect(new URL(`/perfis/${profileId}?connected=1`, req.url));
+    res.cookies.delete(STATE_COOKIE);
+    res.cookies.delete(PROVIDER_COOKIE);
+    return res;
+  } catch (e) {
+    console.error("[instagram] profile creation failed:", e instanceof Error ? e.name : "unknown");
+    return back("connected=1");
+  }
 }

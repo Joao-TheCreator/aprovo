@@ -4,7 +4,7 @@
  * [Meta-side assumption] endpoints/versions follow the current docs; confirm in the Meta dashboard.
  */
 import { randomBytes } from "node:crypto";
-import { eq, lt } from "drizzle-orm";
+import { and, asc, eq, lt } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import {
@@ -299,7 +299,7 @@ export async function exchangeFacebookCode(code: string, fetchImpl: typeof fetch
   };
 }
 
-/** Runs the full provider exchange and upserts the workspace connection. */
+/** Runs the full provider exchange and upserts the connection for (workspace, Instagram account). */
 export async function completeOAuth(
   input: { code: string; workspaceId: string; userId: string; provider?: ConnectionProvider },
   fetchImpl: typeof fetch = fetch,
@@ -326,20 +326,31 @@ export async function completeOAuth(
     .insert(instagramConnections)
     .values(values)
     .onConflictDoUpdate({
-      target: instagramConnections.workspaceId,
+      target: [instagramConnections.workspaceId, instagramConnections.igUserId],
       set: { ...values, updatedAt: new Date() },
     })
     .returning();
   return row;
 }
 
-export async function getWorkspaceConnection(
+/** All Instagram connections of a workspace, oldest first. */
+export async function listConnections(workspaceId: string): Promise<InstagramConnection[]> {
+  return db
+    .select()
+    .from(instagramConnections)
+    .where(eq(instagramConnections.workspaceId, workspaceId))
+    .orderBy(asc(instagramConnections.createdAt), asc(instagramConnections.id));
+}
+
+/** One connection, only if it belongs to the given workspace. */
+export async function getConnectionById(
+  id: string,
   workspaceId: string,
 ): Promise<InstagramConnection | null> {
   const [row] = await db
     .select()
     .from(instagramConnections)
-    .where(eq(instagramConnections.workspaceId, workspaceId))
+    .where(and(eq(instagramConnections.id, id), eq(instagramConnections.workspaceId, workspaceId)))
     .limit(1);
   return row ?? null;
 }
@@ -392,16 +403,34 @@ export async function refreshIfNeeded(
   }
 }
 
-/** Refreshes every connection expiring within the window (weekly cron). */
+/**
+ * Refreshes every connection expiring within the window (weekly cron). One failing connection
+ * never stops the others; outcomes are logged per connection id (no tokens).
+ */
 export async function refreshExpiringConnections(fetchImpl: typeof fetch = fetch) {
   const due = await db
     .select()
     .from(instagramConnections)
     .where(lt(instagramConnections.tokenExpiresAt, new Date(Date.now() + REFRESH_WINDOW_MS)));
   let refreshed = 0;
+  let failed = 0;
   for (const c of due) {
-    const next = await refreshIfNeeded(c, fetchImpl);
-    if (next.tokenExpiresAt.getTime() !== c.tokenExpiresAt.getTime()) refreshed++;
+    try {
+      const next = await refreshIfNeeded(c, fetchImpl);
+      if (next.tokenExpiresAt.getTime() !== c.tokenExpiresAt.getTime()) {
+        refreshed++;
+        console.info(`[instagram] refresh ok connection=${c.id}`);
+      } else {
+        failed++;
+        console.warn(`[instagram] refresh not applied connection=${c.id}`);
+      }
+    } catch (e) {
+      failed++;
+      console.error(
+        `[instagram] refresh error connection=${c.id}:`,
+        e instanceof Error ? e.name : "unknown",
+      );
+    }
   }
-  return { due: due.length, refreshed };
+  return { due: due.length, refreshed, failed };
 }

@@ -1,11 +1,11 @@
 import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { instagramConnections, users } from "@/db/schema";
+import { instagramConnections, profiles, users } from "@/db/schema";
 import { decrypt } from "@/lib/crypto/secretbox";
 import {
   getInstagramProvider,
-  getInstagramProviderForWorkspace,
+  getInstagramProviderForProfile,
   isGraphConfiguredForWorkspace,
 } from "@/lib/instagram";
 import {
@@ -13,7 +13,7 @@ import {
   buildAuthorizeUrl,
   buildFacebookAuthorizeUrl,
   completeOAuth,
-  getWorkspaceConnection,
+  listConnections,
   refreshIfNeeded,
   statesMatch,
 } from "@/lib/instagram/oauth";
@@ -157,11 +157,14 @@ describe("authorize url and state", () => {
 });
 
 describe("facebook authorize url", () => {
-  it("prefers Facebook as the active provider when configured", () => {
+  it("defaults to Instagram Login; Facebook only when selected or the only one configured (ADR-009)", () => {
+    expect(activeOAuthProvider()).toBe("instagram");
+    process.env.META_OAUTH_PROVIDER = "facebook";
+    expect(activeOAuthProvider()).toBe("facebook");
+    delete process.env.META_OAUTH_PROVIDER;
+    delete process.env.META_APP_ID;
     expect(activeOAuthProvider()).toBe("facebook");
     delete process.env.META_FB_APP_ID;
-    expect(activeOAuthProvider()).toBe("instagram");
-    delete process.env.META_APP_ID;
     expect(activeOAuthProvider()).toBeNull();
   });
 
@@ -276,14 +279,31 @@ describe("callback route", () => {
         headers: { cookie: "ig_oauth_state=s1; ig_oauth_provider=instagram" },
       }),
     );
-    expect(ok.headers.get("location")).toContain("/configuracoes?connected=1");
-    expect(await getWorkspaceConnection(workspaceId)).not.toBeNull();
+    const [profile] = await testDb.select().from(profiles);
+    expect(ok.headers.get("location")).toContain(`/perfis/${profile.id}?connected=1`);
+    expect(await listConnections(workspaceId)).toHaveLength(1);
     const denied = await GET(
       new NextRequest(
         "http://localhost:3000/api/instagram/callback?error=access_denied&error_reason=user_denied",
       ),
     );
     expect(denied.headers.get("location")).toContain("error=denied");
+  });
+});
+
+describe("provider resolution by connection_id", () => {
+  it("uses the linked connection even when the username does not match", async () => {
+    await completeOAuth({ code: "c", workspaceId, userId }, metaFetch() as unknown as typeof fetch);
+    const [conn] = await listConnections(workspaceId);
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", metaFetch(calls));
+    const provider = await getInstagramProviderForProfile({
+      workspaceId,
+      igUsername: "cliente",
+      connectionId: conn.id,
+    });
+    await provider.fetchProfile("samuel");
+    expect(calls[0]).toBe("https://graph.instagram.com/v21.0/me");
   });
 });
 
@@ -295,7 +315,7 @@ describe("refreshIfNeeded", () => {
       .update(instagramConnections)
       .set({ tokenExpiresAt: new Date(Date.now() + expiresInDays * 86400_000) })
       .where(eq(instagramConnections.workspaceId, workspaceId));
-    return (await getWorkspaceConnection(workspaceId))!;
+    return (await listConnections(workspaceId))[0]!;
   }
 
   it("does nothing when far from expiry", async () => {
@@ -313,7 +333,7 @@ describe("refreshIfNeeded", () => {
     expect(f).toHaveBeenCalledTimes(1);
     expect(decrypt(out.accessTokenEnc)).toBe("REFRESHED");
     expect(out.tokenExpiresAt.getTime()).toBeGreaterThan(Date.now() + 59 * 86400_000);
-    expect(decrypt((await getWorkspaceConnection(workspaceId))!.accessTokenEnc)).toBe("REFRESHED");
+    expect(decrypt((await listConnections(workspaceId))[0]!.accessTokenEnc)).toBe("REFRESHED");
   });
 
   it("refreshes a facebook connection with fb_exchange_token", async () => {
@@ -325,7 +345,7 @@ describe("refreshIfNeeded", () => {
       .update(instagramConnections)
       .set({ tokenExpiresAt: new Date(Date.now() + 3 * 86400_000) })
       .where(eq(instagramConnections.workspaceId, workspaceId));
-    const c = (await getWorkspaceConnection(workspaceId))!;
+    const c = (await listConnections(workspaceId))[0]!;
     const calls: string[] = [];
     const f = facebookFetch(calls);
     const out = await refreshIfNeeded(c, f as unknown as typeof fetch);
@@ -359,7 +379,11 @@ describe("provider resolution", () => {
         return json({ username: "elim" });
       }),
     );
-    const provider = await getInstagramProviderForWorkspace(workspaceId);
+    const provider = await getInstagramProviderForProfile({
+      workspaceId,
+      igUsername: "samuel",
+      connectionId: null,
+    });
     await provider.fetchProfile("elim");
     expect(seen).toEqual([
       "https://graph.facebook.com/v21.0/17841499999999999",
@@ -375,7 +399,11 @@ describe("provider resolution", () => {
 
     const calls: string[] = [];
     vi.stubGlobal("fetch", metaFetch(calls));
-    const provider = await getInstagramProviderForWorkspace(workspaceId);
+    const provider = await getInstagramProviderForProfile({
+      workspaceId,
+      igUsername: "samuel",
+      connectionId: null,
+    });
     const profile = await provider.fetchProfile("SAMUEL");
     expect("code" in profile).toBe(false);
     if ("code" in profile) return;
@@ -398,7 +426,11 @@ describe("provider resolution", () => {
         return json({ business_discovery: { username: "other", media: { data: [] } } });
       }),
     );
-    const provider = await getInstagramProviderForWorkspace(workspaceId);
+    const provider = await getInstagramProviderForProfile({
+      workspaceId,
+      igUsername: "samuel",
+      connectionId: null,
+    });
     const r = await provider.fetchProfile("other");
     expect("code" in r).toBe(false);
     expect(seen[0]).toContain("https://graph.instagram.com/v21.0/17841400000000001?");
@@ -416,12 +448,26 @@ describe("provider resolution", () => {
         return json({ business_discovery: { username: "other", media: { data: [] } } });
       }),
     );
-    await (await getInstagramProviderForWorkspace(workspaceId)).fetchProfile("other");
+    await (
+      await getInstagramProviderForProfile({
+        workspaceId,
+        igUsername: "samuel",
+        connectionId: null,
+      })
+    ).fetchProfile("other");
     expect(seen[0]).toContain("https://graph.facebook.com/v21.0/999?");
 
     delete process.env.META_GRAPH_ACCESS_TOKEN;
     delete process.env.META_IG_USER_ID;
-    expect(await (await getInstagramProviderForWorkspace(workspaceId)).fetchProfile("x")).toEqual({
+    expect(
+      await (
+        await getInstagramProviderForProfile({
+          workspaceId,
+          igUsername: "samuel",
+          connectionId: null,
+        })
+      ).fetchProfile("x"),
+    ).toEqual({
       code: "not_configured",
     });
     expect(await getInstagramProvider().fetchProfile("x")).toEqual({ code: "not_configured" });

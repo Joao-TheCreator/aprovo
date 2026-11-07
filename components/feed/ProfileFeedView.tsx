@@ -169,6 +169,18 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
         <StatusFilter value={filter} onChange={setFilter} counts={counts} />
       ) : null}
 
+      {profile.importSource === "graph_api" && !profile.connectionId && !canRefresh ? (
+        <PhoneFrame>
+          <p role="status" className="bg-lavanda rounded-2xl px-4 py-3 text-sm">
+            Conta do Instagram desconectada. Reconecte em{" "}
+            <Link href="/configuracoes" className="font-semibold underline">
+              Configurações
+            </Link>
+            .
+          </p>
+        </PhoneFrame>
+      ) : null}
+
       {profile.importStatus === "failed" ? (
         <PhoneFrame>
           <div role="alert" className="bg-lavanda flex flex-col gap-3 rounded-2xl p-4">

@@ -154,6 +154,7 @@ export function PublicApprovalView({ token, data }: Props) {
     importError: null,
     lastImportedAt: null,
     gridRatio: profile.gridRatio,
+    connectionId: null,
   };
 
   return (

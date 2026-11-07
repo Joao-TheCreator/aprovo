@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/instagram", async (orig) => ({
   ...(await orig<typeof import("@/lib/instagram")>()),
   getInstagramProvider: () => mocks.provider,
-  getInstagramProviderForWorkspace: async () => mocks.provider,
+  getInstagramProviderForProfile: async () => mocks.provider,
 }));
 vi.mock("@/lib/instagram/download", () => ({ downloadImage: mocks.download }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -149,6 +149,8 @@ describe("connectProfile", () => {
     const { connectProfile, createProfileWithoutFeed } = await import("@/lib/profiles/actions");
     const first = await connectProfile({ username: "@CPCann" });
     expect(first).toMatchObject({ ok: true, imported: 5, source: "graph_api" });
+    const [manual] = await testDb.select().from(profiles);
+    expect(manual.connectionId).toBeNull();
     const again = await connectProfile({ username: "cpcann" });
     expect(again).toMatchObject({
       ok: false,

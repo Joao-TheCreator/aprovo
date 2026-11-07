@@ -3,7 +3,7 @@ import { users } from "./auth";
 import { id, timestamps } from "./columns";
 import { workspaces } from "./workspaces";
 
-/** Instagram account connected through OAuth (Instagram Login). One per workspace for now. */
+/** Instagram account connected through OAuth (Instagram Login). A workspace can have several, one per Instagram account (unique on workspace + ig_user_id). */
 export const instagramConnections = pgTable(
   "instagram_connections",
   {
@@ -24,7 +24,7 @@ export const instagramConnections = pgTable(
     lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),
     ...timestamps,
   },
-  (t) => [uniqueIndex("instagram_connections_workspace_uq").on(t.workspaceId)],
+  (t) => [uniqueIndex("instagram_connections_workspace_ig_user_uq").on(t.workspaceId, t.igUserId)],
 );
 
 /** "instagram" = legacy Instagram Login (own feed only); "facebook" = Facebook Login (Business Discovery). */

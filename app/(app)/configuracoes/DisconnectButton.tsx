@@ -14,7 +14,13 @@ import {
 } from "@/components/ui/dialog";
 import { disconnectInstagram } from "./actions";
 
-export function DisconnectButton({ username }: { username: string }) {
+export function DisconnectButton({
+  connectionId,
+  username,
+}: {
+  connectionId: string;
+  username: string;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   return (
@@ -24,7 +30,7 @@ export function DisconnectButton({ username }: { username: string }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Desconectar o Instagram?</DialogTitle>
+          <DialogTitle>Desconectar @{username}?</DialogTitle>
           <DialogDescription>
             A conta @{username} deixa de ser usada para carregar feeds. Os perfis e posts já
             importados continuam no APROVO.
@@ -37,7 +43,7 @@ export function DisconnectButton({ username }: { username: string }) {
           <Button
             variant="destructive"
             disabled={pending}
-            onClick={() => start(() => disconnectInstagram())}
+            onClick={() => start(() => disconnectInstagram(connectionId))}
           >
             {pending ? "Desconectando…" : "Desconectar"}
           </Button>
