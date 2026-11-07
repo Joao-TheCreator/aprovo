@@ -135,6 +135,93 @@ profissionais públicas e sem caminho para publicar); scraping (ADR-003).
 conta; contas pessoais não conectam (limitação da Meta). A conta ponte deixa de existir.
 Pendente de implementação: conexões múltiplas, perfil a partir da conexão, publicação.
 
+### ADR-010 · Agendamento e publicação automática no Instagram (06/11/2026)
+**Contexto:** a ADR-009 definiu que o APROVO publica sozinho no feed do cliente depois da
+aprovação. O plano completo está em `docs/12-agendamento-e-publicacao.md`; esta ADR resume o
+que foi decidido e o que ainda falta decidir.
+**Decisão do João:** publicar automaticamente na data e hora marcadas, com o token da própria
+conta conectada (Login do Instagram, escopo `instagram_business_content_publish`).
+**Como fazemos:**
+- Nova tabela `publications` (uma publicação viva por post, índice único parcial), com
+  `scheduled_at` em UTC + `timezone` IANA, `attempts`/`next_attempt_at`, lock por post
+  (`locked_at`/`locked_by`), `container_id` reaproveitado entre tentativas e erro classificado
+  (`last_error_code`). `posts.status` ganha `scheduled`, `published`, `publish_failed`.
+- Mídia: imagem vai como JPEG (original quando já serve; senão derivado `publish/` gerado com
+  `sharp`, sem corte); vídeo vai como Reel (`share_to_feed=true`) com o original. Proporção fora
+  de 4:5–1.91:1 é recusada **na tela**, antes de agendar. URL assinada do R2 com TTL curto,
+  nunca persistida **[confirmar que a Meta aceita query string; plano B é um proxy público com
+  token HMAC]**.
+- Content Publishing API em `graph.instagram.com/v21.0`: `POST /media` → esperar `FINISHED` →
+  `POST /media_publish`; carrossel via `is_carousel_item` + container `CAROUSEL`.
+- Agendador: rota `GET /api/publishing/run` protegida por `CRON_SECRET`, claim atômico com
+  `for update skip locked` (até 5 jobs por execução, 60 s), backoff 1/5/15/60/180 min, erros
+  definitivos (`token_expired`, `not_professional`, `missing_scope`, `media_rejected`) nunca
+  retentam. Antes de `media_publish` numa retentativa, consulta o container para não publicar
+  duas vezes.
+- Disparo: **Decisão do João: pendente** entre Cloudflare Worker gratuito a cada minuto
+  (recomendado agora) e Vercel Pro (US$ 20/mês). A rota é idempotente, então os dois podem
+  coexistir.
+- Conexão: `instagram_connections.status` (`active, expired, revoked, not_professional,
+  missing_scope`); o cron semanal passa a verificar saúde com `/me`; agendamentos de conexão
+  fora de `active` falham na hora com aviso para reconectar; reconectar oferece "Reagendar as N
+  que falharam".
+- Escopo de publicação pedido só com `IG_PUBLISH_ENABLED=true`; conexões antigas (só `basic`)
+  precisam reconectar para publicar.
+- Pós-publicação: post vira `published`, e-mail e toast, e entra na grade pelo caminho normal de
+  importação (`imported_posts` com o `ig_media_id`).
+- App Review da permissão de publicação (screencast, verificação do negócio **[confirmar]**)
+  antes de abrir para contas sem papel no app; até lá só os testadores do app publicam.
+**Alternativas descartadas:** publicar via conta ponte (não existe mais, ADR-009); cron da Vercel
+Hobby (uma vez ao dia, sem precisão de minuto); fila externa (Upstash, SQS) antes de ter
+volume, porque o Postgres com `skip locked` resolve o piloto sem serviço novo.
+**Consequências:** publicação é uma ação em nome do cliente: os Termos de Uso precisam de
+cláusula de mandato (E8); a conta de teste precisa continuar profissional; publicações de
+testadores vão para o Instagram de verdade. Custo continua R$ 0 até o App Review.
+**Decisão do João: pendente** nas perguntas da seção 9 do doc 12: disparador do cron; agendar
+ao aprovar ou com toque explícito (recomendado: explícito); quem agenda (recomendado: só a
+social media); vídeo sempre como Reel e o limite de 90 s; primeiro comentário automático;
+destino do post publicado; retenção de originais após publicar; CNPJ para o portfólio
+empresarial da Meta; conta de teste para publicar de verdade; aviso por WhatsApp em falha; teto
+próprio de agendamentos por dia.
+
+### ADR-011 · Link de aprovação único por pessoa (06/11/2026)
+**Contexto:** a ADR-005 definiu um link por envio, compartilhável, válido por 30 dias. No uso
+real o mesmo link circula no WhatsApp, continua aberto depois da decisão e não diz quem decidiu
+além do nome digitado. O plano completo está em `docs/13-link-unico-de-aprovacao.md`.
+**Decisão do João:** um link por destinatário, que expira ao registrar a decisão; reabrir
+exige a social media gerar link novo. Detalhes marcados abaixo seguem pendentes.
+**Como fazemos:**
+- `approval_links.mode` (`shared` | `personal`), `recipient_name` (obrigatório em `personal`),
+  `recipient_contact` (só para a social media), `used_at`/`used_reason` (`decided` |
+  `superseded`), `superseded_by_link_id`. Novos links nascem `personal`; os existentes viram
+  `shared` e seguem como hoje até expirar ou serem revogados. Teto de 30 dias mantido.
+- O link `personal` se consome quando **todos os itens do envio** têm decisão por aquele link
+  (1 item = primeira decisão). Parcial abandonado continua vivo até os 30 dias.
+- Reabrir reaproveita o `approval_request`, bumpa `posts.sent_for_approval_at` (regra que
+  `decide.ts` já aplica), marca o link antigo da pessoa como `superseded` e emite um novo.
+- Vários destinatários: uma decisão por link por item (índice único); **ajustes solicitados
+  prevalece** sobre aprovação.
+- Auditoria: `approval_decisions` já guarda link, data/hora, IP e user agent; nova tabela
+  `approval_link_opens` (quando, IP, user agent, 90 dias de retenção) e evento
+  `approval.reopened`.
+- Token: `token.ts` não muda. `decide.ts` ganha o estado `used`, a checagem por link e a
+  derivação de status; `actions.ts` recebe destinatários e ganha `reopenApprovalRequest`;
+  `app/a/[token]` roteia `used`/`expired`/`revoked` com mensagens distintas.
+**Alternativas descartadas:** PIN no link (atrito para o cliente; não resolve "quem decidiu");
+conta para o cliente (contraria o briefing); expirar por tempo curto (horas) em vez de por uso
+(o cliente abre quando pode).
+**Consequências:** a folha "Compartilhar link" passa a pedir o nome de cada pessoa; a lista de
+aprovações mostra por pessoa quem abriu e decidiu; um link encaminhado a terceiros depois da
+decisão não permite decidir de novo. R6 cai de "Baixa" para "Muito baixa" no período pós-decisão.
+**Decisão do João: pendente** (perguntas da seção 10 do doc 13):
+1. Link usado mostra recibo somente leitura (recomendado) ou mensagem genérica?
+2. Vários destinatários sem ajustes: basta uma aprovação (recomendado) ou todos precisam aprovar?
+3. Link aberto (`shared`) continua como opção para grupos ou só para links antigos?
+4. Esconder o campo "Seu nome" e usar o nome do destinatário, ou manter editável?
+5. Parcial abandonado: vivo até 30 dias (recomendado) ou encerra após N dias sem atividade?
+6. Retenção de IP/user agent das aberturas: 90 dias?
+7. Reabrir seleciona por padrão só itens com ajustes/editados, ou o envio inteiro?
+
 ## Riscos
 
 | # | Risco | Prob. | Impacto | Mitigação |
@@ -151,6 +238,9 @@ Pendente de implementação: conexões múltiplas, perfil a partir da conexão, 
 | R10 | Vercel Hobby não permite uso comercial | Certa ao cobrar | Médio | Migrar para Pro ou Cloudflare Workers antes de cobrar; app não depende de recursos exclusivos da Vercel |
 | R11 | Conta ponte pessoal não gera token na Graph API | Alta | Alto | Converter o perfil do João em Criador de conteúdo (gratuito, reversível) ou usar outra conta profissional |
 | R12 | Limites gratuitos (Neon 0,5 GB, R2 10 GB) estourarem no piloto | Baixa | Baixo | Monitorar uso; metadados são pequenos; mídia é o único volume |
+| R13 | Publicação duplicada ou na hora errada (cron duplo, função morta no meio, fuso) | Média | Alto | Índice único de publicação viva, `skip locked`, consulta do container antes de republicar, `scheduled_at` em UTC + `timezone` (doc 12 §5.3, §4.7) |
+| R14 | Meta recusa a permissão de publicação no App Review ou exige verificação do negócio | Média | Alto | Piloto com testadores do app; screencast e textos preparados em T12; portfólio empresarial com CNPJ (decisão do João) |
+| R15 | Token da conta do cliente expira e agendamentos falham em silêncio | Média | Médio | Verificação de saúde semanal, status da conexão, falha imediata com aviso e "Reagendar as N que falharam" (doc 12 §7) |
 
 ## Dependências externas (decisões do João)
 
