@@ -91,6 +91,10 @@ Conexões múltiplas por workspace (uma por conta do Instagram), perfil criado a
 conectada, "Conectar perfil" vira "Conectar conta do Instagram"; depois, publicação agendada
 com `instagram_business_content_publish`.
 
+> **Atualização:** a Fase 6 (T1 a T12) foi implementada na branch `claude/blissful-archimedes-cxl86r`
+> (contas múltiplas, agendamento, publicação pelo cron, link por pessoa, e2e em `tests/e2e`).
+> Falta o App Review e o disparador do cron: ver as seções 9 e 10 de `docs/10-deploy-e-meta.md`.
+
 - **Google OAuth:** e-mail do Samuel adicionado como usuário de teste (console.cloud.google.com
   › projeto `aprovo-513922` › Google Auth Platform › Público). O endereço fica no gerenciador
   de senhas, não neste doc.

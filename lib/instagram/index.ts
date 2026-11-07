@@ -57,6 +57,8 @@ export function getInstagramProvider(): InstagramProvider {
 export async function getInstagramProviderForConnection(
   stored: InstagramConnection | null,
 ): Promise<InstagramProvider> {
+  // IG_PUBLISHER=fake (e2e/local without Meta): never call the Graph API with a stand-in token.
+  if (process.env.IG_PUBLISHER === "fake") return new NotConfiguredProvider();
   // A connection that is not active (expired, revoked, ...) has a dead token: never call Meta with it.
   if (stored && stored.status === "active") {
     try {
