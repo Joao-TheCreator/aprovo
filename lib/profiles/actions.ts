@@ -3,35 +3,27 @@
  * Server Actions for profiles (Phase 1). Signatures are the contract in ./contracts.
  * Every action authenticates and scopes by workspace.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
-import { importedPosts, profiles } from "@/db/schema";
+import { importedPosts, mediaAssets, profiles } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import { getCurrentWorkspace, requireUser, requireWorkspaceForProfile } from "@/lib/auth/require";
 import type { IgError } from "@/lib/instagram/types";
 import {
   ACCOUNT_DISCONNECTED_MESSAGE,
   CONNECT_ERROR_MESSAGES,
   NO_BUSINESS_DISCOVERY_MESSAGE,
+  MANUAL_IMPORT_MAX_IMAGES,
   igUsernameSchema,
   manualImportSchema,
   type ActionResult,
   type ConnectErrorCode,
   type ConnectProfileResult,
   type GridRatio,
+  type ManualImportInput,
 } from "./contracts";
 import { IMPORT_CACHE_MS, importProfileFromProvider } from "./import";
-import { storeCachedImage } from "./thumbs";
-
-const MAX_IMAGES = 12;
-const MAX_FILE_BYTES = 15 * 1024 * 1024;
-const ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-]);
 
 function revalidate(profileId?: string) {
   revalidatePath("/perfis");
@@ -117,40 +109,28 @@ export async function createProfileWithoutFeed(input: {
   return { ok: true, profileId: created.id, imported: 0, source: "none" };
 }
 
-function isFile(v: FormDataEntryValue): v is File {
-  return typeof v !== "string" && v.size > 0;
-}
-
-function validateFile(f: File): string | null {
-  const name = f.name || "arquivo";
-  const heicByExt = /\.(heic|heif)$/i.test(name);
-  if (!ALLOWED_TYPES.has(f.type) && !heicByExt)
-    return `${name}: formato não suportado (use JPG, PNG, WebP ou HEIC).`;
-  if (f.size > MAX_FILE_BYTES) return `${name}: maior que 15 MB.`;
-  return null;
-}
-
-function optionalString(fd: FormData, key: string): string | undefined {
-  const v = fd.get(key);
-  return typeof v === "string" && v.trim() !== "" ? v : undefined;
-}
-
-/** Manual import: header fields + avatar file ("avatar") + up to 12 images ("images"). */
+/**
+ * Manual import: header fields + ids of assets already uploaded straight to storage (presigned PUT)
+ * and processed (`ready`). No file ever goes through this Server Action.
+ */
 export async function manualImport(
   profileId: string,
-  formData: FormData,
+  input: ManualImportInput,
 ): Promise<ActionResult<{ imported: number }>> {
-  const { profile } = await requireWorkspaceForProfile(profileId);
+  const { user, profile } = await requireWorkspaceForProfile(profileId);
   const workspaceId = profile.workspaceId;
 
-  const parsed = manualImportSchema.safeParse({
-    displayName: optionalString(formData, "displayName"),
-    biography: optionalString(formData, "biography"),
-    externalUrl: optionalString(formData, "externalUrl"),
-    postsCount: optionalString(formData, "postsCount"),
-    followersCount: optionalString(formData, "followersCount"),
-    followingCount: optionalString(formData, "followingCount"),
-  });
+  if (
+    Array.isArray(input?.imageAssetIds) &&
+    input.imageAssetIds.length > MANUAL_IMPORT_MAX_IMAGES
+  ) {
+    return {
+      ok: false,
+      code: "too_many_files",
+      message: `Envie no máximo ${MANUAL_IMPORT_MAX_IMAGES} imagens.`,
+    };
+  }
+  const parsed = manualImportSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
@@ -158,57 +138,38 @@ export async function manualImport(
       message: parsed.error.issues[0]?.message ?? "Dados inválidos.",
     };
   }
-  const fields = parsed.data;
+  const { avatarAssetId, imageAssetIds, ...fields } = parsed.data;
 
-  const images = formData.getAll("images").filter(isFile);
-  if (images.length > MAX_IMAGES) {
-    return { ok: false, code: "too_many_files", message: `Envie no máximo ${MAX_IMAGES} imagens.` };
+  const wanted = [...new Set([...(avatarAssetId ? [avatarAssetId] : []), ...imageAssetIds])];
+  if (new Set(imageAssetIds).size !== imageAssetIds.length) {
+    return { ok: false, code: "invalid_input", message: "Há fotos repetidas na lista." };
   }
-  const avatarEntry = formData.get("avatar");
-  const avatarFile = avatarEntry && isFile(avatarEntry) ? avatarEntry : null;
-
-  const errors: string[] = [];
-  let avatarAssetId: string | null = null;
-  if (avatarFile) {
-    const err = validateFile(avatarFile);
-    if (err) errors.push(err);
-    else {
-      const stored = await storeCachedImage(
-        workspaceId,
-        Buffer.from(await avatarFile.arrayBuffer()),
-      );
-      if (stored) avatarAssetId = stored.assetId;
-      else errors.push(`${avatarFile.name}: não foi possível ler a imagem.`);
+  if (wanted.length > 0) {
+    const found = await db
+      .select({ id: mediaAssets.id, kind: mediaAssets.kind, status: mediaAssets.status })
+      .from(mediaAssets)
+      .where(and(eq(mediaAssets.workspaceId, workspaceId), inArray(mediaAssets.id, wanted)));
+    if (found.length !== wanted.length || found.some((a) => a.kind !== "image")) {
+      return { ok: false, code: "asset_not_found", message: "Alguma imagem não foi encontrada." };
+    }
+    if (found.some((a) => a.status !== "ready")) {
+      return {
+        ok: false,
+        code: "asset_not_ready",
+        message: "Algumas fotos ainda estão sendo processadas. Aguarde e tente de novo.",
+      };
     }
   }
 
   const base = Date.now();
-  const rows: { igMediaId: string; thumbAssetId: string; publishedAt: Date }[] = [];
-  for (let i = 0; i < images.length; i++) {
-    const file = images[i];
-    const err = validateFile(file);
-    if (err) {
-      errors.push(err);
-      continue;
-    }
-    const stored = await storeCachedImage(workspaceId, Buffer.from(await file.arrayBuffer()));
-    if (!stored) {
-      errors.push(
-        `${file.name}: não foi possível ler a imagem (HEIC não suportado neste servidor?).`,
-      );
-      continue;
-    }
-    rows.push({
-      igMediaId: `manual:${stored.assetId}`,
-      thumbAssetId: stored.assetId,
-      // first file = most recent
-      publishedAt: new Date(base - i * 60_000),
-    });
-  }
-
-  if (images.length > 0 && rows.length === 0) {
-    return { ok: false, code: "no_valid_images", message: errors.join(" ") };
-  }
+  const rows = imageAssetIds.map((assetId, i) => ({
+    profileId,
+    mediaType: "image" as const,
+    igMediaId: `manual_${assetId}`,
+    thumbAssetId: assetId,
+    // first picture = most recent
+    publishedAt: new Date(base - i * 60_000),
+  }));
 
   await db.transaction(async (tx) => {
     await tx
@@ -227,11 +188,13 @@ export async function manualImport(
         lastImportedAt: new Date(),
       })
       .where(eq(profiles.id, profileId));
-    if (rows.length) {
-      await tx
-        .insert(importedPosts)
-        .values(rows.map((r) => ({ profileId, mediaType: "image" as const, ...r })));
-    }
+    if (rows.length) await tx.insert(importedPosts).values(rows);
+    await logActivity(tx, {
+      profileId,
+      actor: `user:${user.id}`,
+      event: "profile.manual_imported",
+      payload: { imported: rows.length, avatar: Boolean(avatarAssetId) },
+    });
   });
 
   revalidate(profileId);

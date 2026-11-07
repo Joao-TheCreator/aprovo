@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   cacheComponents: false,
   // Legal pages read docs/legal/*.md with fs; make sure the files ship with the serverless bundle.
   outputFileTracingIncludes: { "/legal/[slug]": ["./docs/legal/*.md"] },
+  experimental: {
+    // Files never go through Server Actions: media is uploaded straight to R2 with presigned PUTs
+    // and actions only receive ids and text. This cap is a safety net below Vercel's 4.5 MB limit.
+    serverActions: { bodySizeLimit: "4mb" },
+  },
   turbopack: {
     rules: {
       "*.css": {

@@ -114,14 +114,20 @@ export type ProfileFeed = {
   canRefresh: boolean;
 };
 
+export const MANUAL_IMPORT_MAX_IMAGES = 12;
+
+/** Manual import input: files are uploaded straight to storage; only asset ids reach the action. */
 export const manualImportSchema = z.object({
   displayName: z.string().trim().max(80).optional(),
   biography: z.string().trim().max(300).optional(),
   externalUrl: z.string().trim().url().optional().or(z.literal("")),
-  postsCount: z.coerce.number().int().min(0).optional(),
-  followersCount: z.coerce.number().int().min(0).optional(),
-  followingCount: z.coerce.number().int().min(0).optional(),
+  postsCount: z.number().int().min(0).optional(),
+  followersCount: z.number().int().min(0).optional(),
+  followingCount: z.number().int().min(0).optional(),
+  avatarAssetId: z.string().uuid().optional(),
+  imageAssetIds: z.array(z.string().uuid()).max(MANUAL_IMPORT_MAX_IMAGES),
 });
+export type ManualImportInput = z.input<typeof manualImportSchema>;
 
 /** Shown when the connected token cannot use Business Discovery (legacy Instagram Login). */
 export const NO_BUSINESS_DISCOVERY_MESSAGE =

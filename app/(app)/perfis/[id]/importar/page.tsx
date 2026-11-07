@@ -13,10 +13,14 @@ export default async function ImportarPage({ params }: { params: Promise<{ id: s
 
   return (
     <PhoneFrame className="flex flex-col gap-6">
-      <h1 className="text-2xl leading-8 font-bold">Importar manualmente @{p.igUsername}</h1>
-      <p className="text-muted-foreground text-[15px]">
-        Use prints ou os arquivos originais; eles só servem para simular o feed atual.
-      </p>
+      <header className="animate-rise flex flex-col gap-2">
+        <p className="text-micro text-brand-ink uppercase">@{p.igUsername}</p>
+        <h1 className="font-display text-h1 text-balance">Importar manualmente</h1>
+        <p className="text-body text-muted-foreground max-w-[40ch]">
+          Suba prints ou as fotos originais do perfil. Elas só servem para simular o feed atual do
+          cliente.
+        </p>
+      </header>
       <ManualImportForm
         profileId={id}
         defaults={{

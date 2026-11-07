@@ -9,22 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  CONNECT_ERROR_MESSAGES,
-  igUsernameSchema,
-  type ConnectErrorCode,
-} from "@/lib/profiles/contracts";
-import { connectProfile, createProfileWithoutFeed } from "@/lib/profiles/actions";
+import { createProfileWithoutFeed } from "@/lib/profiles/actions";
+import { igUsernameSchema, type ConnectErrorCode } from "@/lib/profiles/contracts";
 
-type FormError = { code: ConnectErrorCode; profileId?: string; message?: string };
+type FormError = { code: ConnectErrorCode; profileId?: string; message: string };
 
-const FALLBACK_CODES: ConnectErrorCode[] = [
-  "private_or_personal",
-  "not_configured",
-  "not_found",
-  "provider_down",
-];
-
+/**
+ * Manual path: the user chose "Importar manualmente", so the profile is created right away and
+ * the Instagram API is never called. The automatic import lives in the OAuth flow.
+ */
 export function ConnectProfileForm() {
   const router = useRouter();
   const [raw, setRaw] = useState("");
@@ -40,28 +33,14 @@ export function ConnectProfileForm() {
     if (!valid) return;
     setError(null);
     startTransition(async () => {
-      const res = await connectProfile({ username });
+      const res = await createProfileWithoutFeed({ username });
       if (res.ok) {
-        toast.success("Perfil conectado");
-        router.push(`/perfis/${res.profileId}`);
-      } else {
+        router.push(`/perfis/${res.profileId}/importar`);
+      } else if (res.code === "already_connected") {
         setError({ code: res.code, profileId: res.profileId, message: res.message });
+      } else {
+        toast.error(res.message);
       }
-    });
-  }
-
-  function withoutFeed(next: "profile" | "import") {
-    startTransition(async () => {
-      let id = error?.profileId;
-      if (!id) {
-        const res = await createProfileWithoutFeed({ username });
-        if (!res.ok) {
-          toast.error(res.message);
-          return;
-        }
-        id = res.profileId;
-      }
-      router.push(next === "import" ? `/perfis/${id}/importar` : `/perfis/${id}`);
     });
   }
 
@@ -81,7 +60,7 @@ export function ConnectProfileForm() {
           ))}
         </div>
         <p className="text-body text-muted-foreground text-center">
-          Carregando o feed de @{username}…
+          Criando o perfil de @{username}…
         </p>
       </div>
     );
@@ -140,36 +119,12 @@ export function ConnectProfileForm() {
           role="alert"
           className="bg-brand-soft border-outline animate-pop-in flex flex-col gap-3 rounded-3xl border p-4"
         >
-          <p className="text-body font-medium">
-            {error.message ?? CONNECT_ERROR_MESSAGES[error.code]}
-          </p>
-          {error.code === "already_connected" ? (
-            error.profileId ? (
-              <Button asChild variant="secondary">
-                <Link href={`/perfis/${error.profileId}`}>Abrir perfil</Link>
-              </Button>
-            ) : (
-              <Button asChild variant="secondary">
-                <Link href="/perfis">Abrir perfil</Link>
-              </Button>
-            )
-          ) : error.code === "rate_limited" ? (
-            <Button type="button" onClick={submit}>
-              Tentar de novo
-            </Button>
-          ) : FALLBACK_CODES.includes(error.code) ? (
-            <div className="flex flex-col gap-2">
-              <Button type="button" onClick={submit}>
-                Tentar de novo
-              </Button>
-              <Button type="button" variant="outline" onClick={() => withoutFeed("import")}>
-                Importar manualmente
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => withoutFeed("profile")}>
-                Continuar sem feed
-              </Button>
-            </div>
-          ) : null}
+          <p className="text-body font-medium">{error.message}</p>
+          <Button asChild variant="secondary">
+            <Link href={error.profileId ? `/perfis/${error.profileId}` : "/perfis"}>
+              Abrir perfil
+            </Link>
+          </Button>
         </div>
       ) : null}
 
