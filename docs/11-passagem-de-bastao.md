@@ -77,11 +77,11 @@ Instagram" › aba **Configuração da API com login do Instagram**:
   do Instagram: "Conectado como @joaomoreiraj", feed com 6 posts e miniaturas. A Graph API
   confirmou que `business_discovery` **não existe** no Login do Instagram, o que levou às
   ADR-008 e ADR-009.
-- Temporários a desfazer quando o João quiser: vínculo da Página do Facebook **Heloisa Souza**
-  com `@joaomoreiraj` (feito só para testar o Login do Facebook; desfazer no Meta Business
-  Suite da Página › Configurações › Contas vinculadas) e a conversão da conta para
-  profissional. **Atenção:** a conta precisa continuar profissional enquanto for a conta de
-  teste do APROVO; ao voltar para pessoal, a conexão para de funcionar.
+- A Página do Facebook **Heloisa Souza** foi vinculada a `@joaomoreiraj` só para testar o Login
+  do Facebook e depois **excluída** pelo João (06/11/2026; o Facebook permite reativar por 14
+  dias). A conversão de `@joaomoreiraj` para profissional permanece. **Atenção:** a conta
+  precisa continuar profissional enquanto for a conta de teste do APROVO; ao voltar para
+  pessoal, a conexão para de funcionar.
 - Integração ELIM MKT nas "Integrações comerciais" do Facebook do João: pode ser removida se o
   Login do Facebook não for usado.
 
