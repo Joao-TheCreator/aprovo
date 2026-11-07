@@ -9,7 +9,7 @@ jpedrobiel@gmail.com (Vercel via GitHub).
 | Banco Neon | feito |
 | Cloudflare R2 (bucket, token, CORS) | feito |
 | Resend (API key) | feito |
-| Login com Google (OAuth) | feito; falta adicionar o e-mail do Samuel como testador |
+| Login com Google (OAuth) | feito; e-mail do Samuel na lista de testadores |
 | Vercel (deploy + migrations) | feito, no ar; produção segue `main`; `CRON_SECRET` cadastrada |
 | GitHub | `main` é a branch padrão |
 | App na Meta (Instagram) | feito no app existente **ELIM MKT** (ver seção abaixo) |
@@ -64,8 +64,9 @@ Instagram" › aba **Configuração da API com login do Instagram**:
 - **Funções:** `samuelbozzuto` convidado como Testador do Instagram (pendente de aceite em
   Instagram › Configurações › Site e apps › Convites de testador).
 
-Falta: **e-mail Google do Samuel** (ou outra conta Google) na lista de testadores do OAuth
-(console.cloud.google.com › projeto `aprovo-513922` › Google Auth Platform › Público).
+- **Google OAuth:** e-mail do Samuel adicionado como usuário de teste (console.cloud.google.com
+  › projeto `aprovo-513922` › Google Auth Platform › Público). O endereço fica no gerenciador
+  de senhas, não neste doc.
 
 ## Observações operacionais
 
