@@ -345,7 +345,8 @@ negócio, se exigida, pode levar mais alguns dias e acontece antes ou em paralel
 
 A rota `GET /api/publishing/run` (docs/12 §5) precisa ser chamada **a cada minuto**; no plano
 Hobby da Vercel o cron do `vercel.json` roda no máximo uma vez por dia **[confirmar no painel]**
-(a entrada horária atual é só rede de segurança). Duas opções, decisão do João (ADR-010):
+(a entrada diária atual, `30 3 * * *`, é só rede de segurança: o plano Hobby recusa o deploy com
+cron mais frequente que uma vez por dia). Duas opções, decisão do João (ADR-010):
 
 | Opção | Custo | Quando usar |
 |---|---|---|
