@@ -162,12 +162,22 @@ describe("approvals", () => {
     const { profile, mkPost } = await seed();
     const approved = await mkPost({ status: "approved" });
     expect(
-      await createApprovalRequest({ profileId: profile.id, postIds: [approved] }),
+      await createApprovalRequest({
+        profileId: profile.id,
+        postIds: [approved],
+        recipients: [{ name: "Carlos" }],
+      }),
     ).toMatchObject({
       code: "invalid_status",
     });
     const proc = await mkPost({ assetStatus: "processing" });
-    expect(await createApprovalRequest({ profileId: profile.id, postIds: [proc] })).toMatchObject({
+    expect(
+      await createApprovalRequest({
+        profileId: profile.id,
+        postIds: [proc],
+        recipients: [{ name: "Carlos" }],
+      }),
+    ).toMatchObject({
       code: "no_ready_media",
     });
   });

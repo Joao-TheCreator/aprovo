@@ -30,8 +30,10 @@ const TZ = "America/Sao_Paulo";
 type PostStatus = typeof posts.$inferSelect.status;
 
 /** A workspace with a publish-capable connection linked to the profile and an approved post. */
+let seedCounter = 0;
 async function approvedPost(opts: { status?: PostStatus; items?: Array<"image" | "video"> } = {}) {
-  const job = await seedJob({ items: opts.items });
+  // Each call seeds its own workspace; users.email is unique, so give every call a distinct address.
+  const job = await seedJob({ items: opts.items, email: `u${++seedCounter}@x.co` });
   mocks.user.id = job.user.id;
   await testDb.delete(publications).where(eq(publications.id, job.pub.id));
   await testDb
