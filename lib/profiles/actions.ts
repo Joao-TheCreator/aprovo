@@ -10,6 +10,7 @@ import { importedPosts, profiles } from "@/db/schema";
 import { getCurrentWorkspace, requireUser, requireWorkspaceForProfile } from "@/lib/auth/require";
 import type { IgError } from "@/lib/instagram/types";
 import {
+  ACCOUNT_DISCONNECTED_MESSAGE,
   CONNECT_ERROR_MESSAGES,
   NO_BUSINESS_DISCOVERY_MESSAGE,
   igUsernameSchema,
@@ -39,7 +40,11 @@ function revalidate(profileId?: string) {
 
 /** Generic message per code, except the specific "reconnect with Facebook" guidance. */
 function igMessage(error: IgError): string {
-  if (error.code === "provider_down" && error.message === NO_BUSINESS_DISCOVERY_MESSAGE) {
+  if (
+    error.code === "provider_down" &&
+    (error.message === NO_BUSINESS_DISCOVERY_MESSAGE ||
+      error.message === ACCOUNT_DISCONNECTED_MESSAGE)
+  ) {
     return error.message;
   }
   return CONNECT_ERROR_MESSAGES[error.code];

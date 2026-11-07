@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { PhoneFrame } from "@/components/app/PhoneFrame";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { isOAuthConfigured } from "@/lib/instagram/oauth";
 import { listProfiles } from "@/lib/profiles/queries";
 import type { ProfileListItem } from "@/lib/profiles/contracts";
 import { relativeTimePt } from "@/lib/profiles/ui-time";
@@ -28,6 +29,7 @@ function CountPill({ n, label, className }: { n: number; label: string; classNam
 
 export default async function PerfisPage() {
   const profiles = await listProfiles();
+  const oauth = isOAuthConfigured();
 
   return (
     <PhoneFrame className="flex flex-col gap-6">
@@ -35,24 +37,53 @@ export default async function PerfisPage() {
         <h1 className="text-2xl leading-8 font-bold">Perfis</h1>
         {profiles.length > 0 ? (
           <Button asChild>
-            <Link href="/perfis/novo">
-              <Plus aria-hidden />
-              Conectar perfil
-            </Link>
+            {oauth ? (
+              // API route (redirect to Instagram), not a page: plain anchor is intended.
+              <a href="/api/instagram/connect">
+                <Plus aria-hidden />
+                Conectar conta do Instagram
+              </a>
+            ) : (
+              <Link href="/perfis/novo">
+                <Plus aria-hidden />
+                Importar manualmente
+              </Link>
+            )}
           </Button>
         ) : null}
       </div>
       {profiles.length === 0 ? (
         <EmptyState
-          title="Conecte o primeiro perfil"
-          description="Digite o @ do Instagram do seu cliente para carregar o feed. Apenas contas públicas."
+          title="Conecte a primeira conta"
+          description={
+            oauth
+              ? "A conta precisa ser profissional (Empresa ou Criador). Você autoriza o APROVO uma vez por conta."
+              : "A conexão com o Instagram não está configurada neste servidor. Você pode importar um perfil manualmente."
+          }
         >
-          <Button asChild>
-            <Link href="/perfis/novo">
-              <Plus aria-hidden />
-              Conectar perfil
-            </Link>
-          </Button>
+          {oauth ? (
+            <div className="flex flex-col items-center gap-3">
+              <Button asChild>
+                <a href="/api/instagram/connect">
+                  <Plus aria-hidden />
+                  Conectar conta do Instagram
+                </a>
+              </Button>
+              <Link
+                href="/perfis/novo?manual=1"
+                className="text-muted-foreground text-sm underline"
+              >
+                Importar manualmente
+              </Link>
+            </div>
+          ) : (
+            <Button asChild>
+              <Link href="/perfis/novo">
+                <Plus aria-hidden />
+                Importar manualmente
+              </Link>
+            </Button>
+          )}
         </EmptyState>
       ) : (
         <ul className="flex flex-col gap-3">

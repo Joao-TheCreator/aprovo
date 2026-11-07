@@ -149,6 +149,8 @@ describe("connectProfile", () => {
     const { connectProfile, createProfileWithoutFeed } = await import("@/lib/profiles/actions");
     const first = await connectProfile({ username: "@CPCann" });
     expect(first).toMatchObject({ ok: true, imported: 5, source: "graph_api" });
+    const [manual] = await testDb.select().from(profiles);
+    expect(manual.connectionId).toBeNull();
     const again = await connectProfile({ username: "cpcann" });
     expect(again).toMatchObject({
       ok: false,

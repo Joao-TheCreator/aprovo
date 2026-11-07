@@ -1,5 +1,8 @@
+import { and, eq, isNotNull } from "drizzle-orm";
 import Link from "next/link";
 
+import { db } from "@/db/client";
+import { profiles } from "@/db/schema";
 import { PhoneFrame } from "@/components/app/PhoneFrame";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +51,14 @@ export default async function ConfiguracoesPage({
   const user = await requireUser();
   const ws = await getCurrentWorkspace(user.id!);
   const connections = ws ? await listConnections(ws.id) : [];
+  // One query for the "Ver perfil" links (profiles.connection_id), scoped by workspace.
+  const linked = ws
+    ? await db
+        .select({ id: profiles.id, connectionId: profiles.connectionId })
+        .from(profiles)
+        .where(and(eq(profiles.workspaceId, ws.id), isNotNull(profiles.connectionId)))
+    : [];
+  const profileByConnection = new Map(linked.map((p) => [p.connectionId, p.id]));
   const configured = isOAuthConfigured();
   const activeProvider = activeOAuthProvider();
   const error = sp.error ? (ERRORS[sp.error] ?? ERRORS.exchange_failed) : null;
@@ -78,6 +89,7 @@ export default async function ConfiguracoesPage({
           <>
             <ul className="flex flex-col gap-4">
               {connections.map((c) => {
+                const profileId = profileByConnection.get(c.id);
                 const canPublish = c.scopes.includes(PUBLISH_SCOPE);
                 const legacy = c.provider === "instagram" && activeProvider === "facebook";
                 return (
@@ -115,6 +127,11 @@ export default async function ConfiguracoesPage({
                         {/* API route (redirect to Instagram), not a page: plain anchor is intended. */}
                         <a href="/api/instagram/connect">Reconectar</a>
                       </Button>
+                      {profileId ? (
+                        <Button asChild variant="outline">
+                          <Link href={`/perfis/${profileId}`}>Ver perfil</Link>
+                        </Button>
+                      ) : null}
                       <DisconnectButton connectionId={c.id} username={c.username} />
                     </div>
                   </li>

@@ -2,10 +2,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { importedPosts, profiles, profileSnapshots } from "@/db/schema";
 import { downloadImage } from "@/lib/instagram/download";
-import { getInstagramProviderForProfile } from "@/lib/instagram";
+import { getInstagramProviderForProfile, isGraphConfigured } from "@/lib/instagram";
+import { listConnections } from "@/lib/instagram/oauth";
 import type { IgError, IgMedia, IgProfile } from "@/lib/instagram/types";
 import { isIgError } from "@/lib/instagram/types";
-import { NO_BUSINESS_DISCOVERY_MESSAGE } from "./contracts";
+import { ACCOUNT_DISCONNECTED_MESSAGE, NO_BUSINESS_DISCOVERY_MESSAGE } from "./contracts";
 import { storeCachedImage } from "./thumbs";
 
 export type ImportResult = { ok: true; imported: number } | { ok: false; error: IgError };
@@ -24,7 +25,8 @@ export function importErrorMessage(e: IgError): string {
     case "not_configured":
       return "A importação automática não está configurada.";
     case "provider_down":
-      return e.message === NO_BUSINESS_DISCOVERY_MESSAGE
+      return e.message === NO_BUSINESS_DISCOVERY_MESSAGE ||
+        e.message === ACCOUNT_DISCONNECTED_MESSAGE
         ? e.message
         : "O Instagram não respondeu à importação.";
   }
@@ -80,6 +82,16 @@ export async function importProfileFromProvider(profileId: string): Promise<Impo
     .set({ importStatus: "importing", importError: null })
     .where(eq(profiles.id, profileId));
 
+  // A graph_api profile lost its link (connection removed) and nothing else can serve it.
+  if (
+    profile.importSource === "graph_api" &&
+    !profile.connectionId &&
+    !isGraphConfigured() &&
+    (await listConnections(profile.workspaceId)).length === 0
+  ) {
+    return failImport(profileId, { code: "provider_down", message: ACCOUNT_DISCONNECTED_MESSAGE });
+  }
+
   let data: IgProfile;
   try {
     const provider = await getInstagramProviderForProfile(profile);
@@ -120,7 +132,7 @@ export async function importProfileFromProvider(profileId: string): Promise<Impo
           postsCount: data.mediaCount,
           followersCount: data.followersCount,
           followingCount: data.followingCount,
-          accountType: "business",
+          accountType: profile.accountType === "unknown" ? "business" : profile.accountType,
           ...(avatar ? { avatarAssetId: avatar.assetId } : {}),
           importSource: "graph_api",
           importStatus: "ok",

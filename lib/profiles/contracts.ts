@@ -96,6 +96,8 @@ export type ProfileFeed = {
     importError: string | null;
     lastImportedAt: Date | null;
     gridRatio: GridRatio;
+    /** Linked Instagram connection; null on manual profiles and after a disconnect. */
+    connectionId: string | null;
   };
   items: FeedItem[];
   /** True when the Graph API is configured on the server (controls the "Atualizar feed" button). */
@@ -114,6 +116,10 @@ export const manualImportSchema = z.object({
 /** Shown when the connected token cannot use Business Discovery (legacy Instagram Login). */
 export const NO_BUSINESS_DISCOVERY_MESSAGE =
   "Esta conexão só carrega o feed da própria conta conectada. Conecte a conta do cliente em Configurações ou importe manualmente.";
+
+/** Import error of a graph_api profile whose Instagram connection was removed. */
+export const ACCOUNT_DISCONNECTED_MESSAGE =
+  "Conta do Instagram desconectada. Reconecte em Configurações.";
 
 /** Human messages for Tela 01 error states. */
 export const CONNECT_ERROR_MESSAGES: Record<ConnectErrorCode, string> = {
