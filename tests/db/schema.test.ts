@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { posts, profiles, users, workspaceMembers, workspaces } from "@/db/schema";
 import { testDb as db } from "../setup";
@@ -26,6 +27,13 @@ describe("schema", () => {
     await expect(
       db.insert(profiles).values({ workspaceId: ws.id, igUsername: "cliente" }),
     ).rejects.toThrow();
+  });
+
+  it("creates the publications table", async () => {
+    const rows = await db.execute<{ tablename: string }>(
+      sql`select tablename from pg_tables where schemaname = 'public' and tablename = 'publications'`,
+    );
+    expect([...rows]).toHaveLength(1);
   });
 
   it("rejects duplicate (profile_id, position) on posts", async () => {

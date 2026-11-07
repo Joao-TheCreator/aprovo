@@ -28,7 +28,15 @@ async function signedUrls(keys: (string | null | undefined)[]): Promise<(string 
 }
 
 function emptyCounts(): Record<PostStatus, number> {
-  return { draft: 0, pending_approval: 0, approved: 0, changes_requested: 0 };
+  return {
+    draft: 0,
+    pending_approval: 0,
+    approved: 0,
+    changes_requested: 0,
+    scheduled: 0,
+    published: 0,
+    publish_failed: 0,
+  };
 }
 
 export async function listProfiles(): Promise<ProfileListItem[]> {

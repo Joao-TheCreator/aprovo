@@ -50,6 +50,13 @@
       "when": 1794020393287,
       "tag": "0006_gray_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794021120526,
+      "tag": "0007_futuristic_malice",
+      "breakpoints": true
     }
   ]
 }

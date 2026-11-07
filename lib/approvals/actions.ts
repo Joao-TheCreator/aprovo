@@ -83,6 +83,7 @@ export async function createApprovalRequest(
       and(inArray(posts.id, postIds), eq(posts.profileId, profileId), isNull(posts.archivedAt)),
     );
   if (rows.length !== postIds.length) return fail("not_found", "Publicação não encontrada.");
+  if (rows.some((p) => p.status === "published")) return fail("published_locked");
   if (rows.some((p) => p.status !== "draft" && p.status !== "changes_requested")) {
     return fail("invalid_status");
   }

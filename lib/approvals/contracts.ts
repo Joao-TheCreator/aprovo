@@ -125,6 +125,7 @@ export type LiveEvent =
 
 export const APPROVAL_ERROR_MESSAGES: Record<string, string> = {
   no_ready_media: "Alguma publicação ainda está processando a mídia. Aguarde para enviar.",
+  published_locked: "Publicações já publicadas no Instagram não podem ser alteradas.",
   invalid_status: "Só rascunhos e publicações com ajustes solicitados podem ser enviados.",
   link_inactive: "Este link não está mais ativo. Peça um novo link ao seu social media.",
   already_decided: "Esta publicação já foi decidida por este link.",

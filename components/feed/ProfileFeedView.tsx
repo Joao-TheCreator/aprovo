@@ -58,6 +58,9 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
       pending_approval: 0,
       approved: 0,
       changes_requested: 0,
+      scheduled: 0,
+      published: 0,
+      publish_failed: 0,
     };
     for (const i of items) {
       if (i.kind !== "planned") continue;

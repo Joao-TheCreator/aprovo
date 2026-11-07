@@ -9,6 +9,7 @@ import {
 } from "./approvals";
 import { mediaAssets } from "./media";
 import { postMedia, posts } from "./posts";
+import { publications } from "./publications";
 import { importedPosts, profileSnapshots, profiles } from "./profiles";
 import { workspaceMembers, workspaces } from "./workspaces";
 
@@ -65,6 +66,11 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   media: many(postMedia),
   approvalItems: many(approvalItems),
   decisions: many(approvalDecisions),
+  publications: many(publications),
+}));
+export const publicationsRelations = relations(publications, ({ one }) => ({
+  post: one(posts, { fields: [publications.postId], references: [posts.id] }),
+  profile: one(profiles, { fields: [publications.profileId], references: [profiles.id] }),
 }));
 export const postMediaRelations = relations(postMedia, ({ one }) => ({
   post: one(posts, { fields: [postMedia.postId], references: [posts.id] }),

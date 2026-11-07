@@ -1,13 +1,14 @@
 "use server";
 /** Phase 2 publication actions. Every action authenticates and scopes by workspace. */
-import { and, eq, inArray, isNull, min, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, min, notInArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { mediaAssets, postMedia, posts } from "@/db/schema";
+import { mediaAssets, postMedia, posts, publications } from "@/db/schema";
 import { requireWorkspaceForProfile } from "@/lib/auth/require";
 import { logActivity } from "@/lib/activity/log";
 import type { ActionResult } from "@/lib/profiles/contracts";
+import { canEditPost, nextPostStatus } from "@/lib/publishing/state";
 import {
   createPostSchema,
   POST_ERROR_MESSAGES,
@@ -49,6 +50,40 @@ async function loadPost(postId: string): Promise<{ post: PostRow; member: Member
   if (!post) return null;
   const member = await memberForProfile(post.profileId);
   return member ? { post, member } : null;
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Editing a `scheduled` post cancels its live publication and sends it back to draft
+ * (docs/12 section 2.2). Returns the patch to apply on the post row, or null when the post is not scheduled.
+ */
+async function cancelScheduleForEdit(
+  tx: Tx,
+  post: PostRow,
+  userId: string,
+): Promise<Partial<typeof posts.$inferInsert> | null> {
+  if (post.status !== "scheduled") return null;
+  const now = new Date();
+  const cancelled = await tx
+    .update(publications)
+    .set({ status: "cancelled", cancelledAt: now, cancelledBy: userId, updatedAt: now })
+    .where(
+      and(
+        eq(publications.postId, post.id),
+        sql`${publications.status} in ('scheduled', 'publishing')`,
+      ),
+    )
+    .returning({ id: publications.id });
+  for (const c of cancelled) {
+    await logActivity(tx, {
+      profileId: post.profileId,
+      actor: `user:${userId}`,
+      event: "publication.cancelled",
+      payload: { postId: post.id, publicationId: c.id, reason: "edited" },
+    });
+  }
+  return { status: nextPostStatus(post.status, "edit"), approvedAt: null };
 }
 
 function revalidate(profileId: string, postId: string) {
@@ -118,6 +153,7 @@ export async function updatePost(input: UpdatePostInput): Promise<ActionResult> 
   const loaded = await loadPost(postId);
   if (!loaded) return fail("not_found");
   const { post, member } = loaded;
+  if (!canEditPost(post.status)) return fail("published_locked");
 
   const patch: Partial<typeof posts.$inferInsert> = {};
   if (caption !== undefined) patch.caption = caption;
@@ -130,11 +166,17 @@ export async function updatePost(input: UpdatePostInput): Promise<ActionResult> 
     patch.approvedAt = null;
   }
 
+  // Changing notes alone does not touch what will be published, so it keeps the schedule.
+  const touchesContent =
+    caption !== undefined || hashtags !== undefined || scheduledFor !== undefined;
   const actor = `user:${member.user.id}` as const;
   await db.transaction(async (tx) => {
+    const unscheduled = touchesContent
+      ? await cancelScheduleForEdit(tx, post, member.user.id)
+      : null;
     await tx
       .update(posts)
-      .set({ ...patch, updatedAt: new Date() })
+      .set({ ...patch, ...unscheduled, updatedAt: new Date() })
       .where(eq(posts.id, postId));
     if (reopen) {
       await logActivity(tx, {
@@ -162,6 +204,7 @@ export async function updatePostMedia(input: UpdatePostMediaInput): Promise<Acti
   const loaded = await loadPost(postId);
   if (!loaded) return fail("not_found");
   const { post, member } = loaded;
+  if (!canEditPost(post.status)) return fail("published_locked");
   const ids = items.map((i) => i.assetId);
   if (!countOk(post.kind, ids.length) || new Set(ids).size !== ids.length) {
     return fail("invalid_media_count");
@@ -181,6 +224,7 @@ export async function updatePostMedia(input: UpdatePostMediaInput): Promise<Acti
   const reopen = post.status === "approved";
   const actor = `user:${member.user.id}` as const;
   await db.transaction(async (tx) => {
+    const unscheduled = await cancelScheduleForEdit(tx, post, member.user.id);
     await tx
       .delete(postMedia)
       .where(and(eq(postMedia.postId, postId), notInArray(postMedia.assetId, ids)));
@@ -218,7 +262,10 @@ export async function updatePostMedia(input: UpdatePostMediaInput): Promise<Acti
         payload: { postId },
       });
     } else {
-      await tx.update(posts).set({ updatedAt: new Date() }).where(eq(posts.id, postId));
+      await tx
+        .update(posts)
+        .set({ ...unscheduled, updatedAt: new Date() })
+        .where(eq(posts.id, postId));
     }
     await logActivity(tx, {
       profileId: post.profileId,
@@ -235,6 +282,7 @@ export async function archivePost(postId: string, archived: boolean): Promise<Ac
   const loaded = await loadPost(postId);
   if (!loaded) return fail("not_found");
   const { post, member } = loaded;
+  if (!canEditPost(post.status)) return fail("published_locked");
   await db.transaction(async (tx) => {
     await tx
       .update(posts)
@@ -256,6 +304,7 @@ export async function deletePost(postId: string): Promise<ActionResult> {
   const loaded = await loadPost(postId);
   if (!loaded) return fail("not_found");
   const { post, member } = loaded;
+  if (!canEditPost(post.status)) return fail("published_locked");
   await db.transaction(async (tx) => {
     await tx.delete(posts).where(eq(posts.id, postId));
     await logActivity(tx, {
@@ -351,6 +400,7 @@ export async function bulkArchivePosts(
   const loaded = await loadBulk(postIds);
   if (!loaded) return fail("not_found");
   const { rows, member, profileId } = loaded;
+  if (rows.some((r) => !canEditPost(r.status))) return fail("published_locked");
   await db.transaction(async (tx) => {
     await tx
       .update(posts)
@@ -378,6 +428,7 @@ export async function bulkDeletePosts(postIds: string[]): Promise<ActionResult> 
   const loaded = await loadBulk(postIds);
   if (!loaded) return fail("not_found");
   const { rows, member, profileId } = loaded;
+  if (rows.some((r) => !canEditPost(r.status))) return fail("published_locked");
   await db.transaction(async (tx) => {
     await tx.delete(posts).where(
       inArray(

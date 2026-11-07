@@ -12,6 +12,16 @@ export const postStatus = pgEnum("post_status", [
   "pending_approval",
   "approved",
   "changes_requested",
+  "scheduled",
+  "published",
+  "publish_failed",
+]);
+export const publicationStatus = pgEnum("publication_status", [
+  "scheduled",
+  "publishing",
+  "published",
+  "failed",
+  "cancelled",
 ]);
 export const assetKind = pgEnum("asset_kind", ["image", "video"]);
 export const assetStatus = pgEnum("asset_status", ["uploading", "processing", "ready", "failed"]);

@@ -17,7 +17,14 @@ export type ImportSource = "graph_api" | "fallback" | "manual";
 export type AccountType = "business" | "creator" | "personal" | "unknown";
 export type GridRatio = "1:1" | "3:4";
 export type ImportedMediaType = "image" | "carousel" | "video";
-export type PostStatus = "draft" | "pending_approval" | "approved" | "changes_requested";
+export type PostStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "changes_requested"
+  | "scheduled"
+  | "published"
+  | "publish_failed";
 
 export type ConnectErrorCode =
   | "invalid_username"
