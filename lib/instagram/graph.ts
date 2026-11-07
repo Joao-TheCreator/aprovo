@@ -103,7 +103,17 @@ export class GraphBusinessDiscoveryProvider implements InstagramProvider {
     } catch {
       body = null;
     }
-    if (!res.ok) return mapGraphError(res.status, body);
+    if (!res.ok) {
+      // Log the Graph error body (never the token or the URL) so failures are diagnosable.
+      const err = (body as { error?: unknown } | null)?.error;
+      console.warn(
+        "[instagram] graph error",
+        res.status,
+        path.replace(this.cfg.igUserId, "<ig-user>"),
+        JSON.stringify(err ?? body).slice(0, 400),
+      );
+      return mapGraphError(res.status, body);
+    }
     return body ?? ({ code: "provider_down", message: "Resposta vazia." } as IgError);
   }
 
