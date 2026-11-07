@@ -18,6 +18,7 @@ export const instagramConnections = pgTable(
     /** AES-256-GCM envelope, see lib/crypto/secretbox.ts. Never store or log the clear token. */
     accessTokenEnc: text("access_token_enc").notNull(),
     tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }).notNull(),
+    provider: text("provider").$type<ConnectionProvider>().notNull().default("instagram"),
     scopes: text("scopes").array().notNull().default([]),
     connectedBy: uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
     lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),
@@ -25,5 +26,8 @@ export const instagramConnections = pgTable(
   },
   (t) => [uniqueIndex("instagram_connections_workspace_uq").on(t.workspaceId)],
 );
+
+/** "instagram" = legacy Instagram Login (own feed only); "facebook" = Facebook Login (Business Discovery). */
+export type ConnectionProvider = "instagram" | "facebook";
 
 export type InstagramConnection = typeof instagramConnections.$inferSelect;

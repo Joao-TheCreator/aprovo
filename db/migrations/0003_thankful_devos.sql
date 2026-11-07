@@ -1,0 +1,1 @@
+ALTER TABLE "instagram_connections" ADD COLUMN "provider" text DEFAULT 'instagram' NOT NULL;

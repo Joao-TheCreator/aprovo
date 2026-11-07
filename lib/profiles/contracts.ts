@@ -9,7 +9,9 @@ export const igUsernameSchema = z
   .string()
   .trim()
   .transform((v) => v.replace(/^@/, "").toLowerCase())
-  .pipe(z.string().regex(/^[a-z0-9._]{1,30}$/, "Informe um @ válido (letras, números, ponto e _)."));
+  .pipe(
+    z.string().regex(/^[a-z0-9._]{1,30}$/, "Informe um @ válido (letras, números, ponto e _)."),
+  );
 
 export type ImportSource = "graph_api" | "fallback" | "manual";
 export type AccountType = "business" | "creator" | "personal" | "unknown";
@@ -31,8 +33,7 @@ export type ConnectProfileResult =
   | { ok: false; code: ConnectErrorCode; message: string; profileId?: string };
 
 export type ActionResult<T = undefined> =
-  | { ok: true; data: T }
-  | { ok: false; code: string; message: string };
+  { ok: true; data: T } | { ok: false; code: string; message: string };
 
 /** Row for the profile list (Tela 00). */
 export type ProfileListItem = {
@@ -109,6 +110,10 @@ export const manualImportSchema = z.object({
   followersCount: z.coerce.number().int().min(0).optional(),
   followingCount: z.coerce.number().int().min(0).optional(),
 });
+
+/** Shown when the connected token cannot use Business Discovery (legacy Instagram Login). */
+export const NO_BUSINESS_DISCOVERY_MESSAGE =
+  "Esta conexão não permite importar outros perfis. Reconecte com o Facebook em Configurações.";
 
 /** Human messages for Tela 01 error states. */
 export const CONNECT_ERROR_MESSAGES: Record<ConnectErrorCode, string> = {

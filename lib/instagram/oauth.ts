@@ -1,13 +1,17 @@
 // Server-only module: never import from client components.
 /**
- * Instagram API with Instagram Login (OAuth). All Meta URLs live here so they are easy to adjust.
+ * Meta OAuth: Facebook Login (current) and Instagram Login (legacy). All Meta URLs live here so they are easy to adjust.
  * [Meta-side assumption] endpoints/versions follow the current docs; confirm in the Meta dashboard.
  */
 import { randomBytes } from "node:crypto";
 import { eq, lt } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { instagramConnections, type InstagramConnection } from "@/db/schema";
+import {
+  instagramConnections,
+  type ConnectionProvider,
+  type InstagramConnection,
+} from "@/db/schema";
 import { decrypt, encrypt } from "@/lib/crypto/secretbox";
 
 export const IG_AUTHORIZE_URL = "https://www.instagram.com/oauth/authorize";
@@ -17,14 +21,36 @@ export const IG_LONG_LIVED_URL = `${IG_GRAPH_HOST}/access_token`;
 export const IG_REFRESH_URL = `${IG_GRAPH_HOST}/refresh_access_token`;
 export const IG_ME_URL = `${IG_GRAPH_HOST}/v21.0/me`;
 export const SCOPES = ["instagram_business_basic"] as const;
+export const FB_AUTHORIZE_URL = "https://www.facebook.com/v21.0/dialog/oauth";
+export const FB_GRAPH_HOST = "https://graph.facebook.com";
+export const FB_TOKEN_URL = `${FB_GRAPH_HOST}/v21.0/oauth/access_token`;
+export const FB_SCOPES = ["instagram_basic", "pages_show_list", "pages_read_engagement"] as const;
+const FB_DEFAULT_EXPIRES_IN_SEC = 60 * 24 * 60 * 60;
 export const STATE_COOKIE = "ig_oauth_state";
+export const PROVIDER_COOKIE = "ig_oauth_provider";
 export const STATE_TTL_SEC = 600;
 export const REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-export type OAuthErrorCode = "not_configured" | "denied" | "exchange_failed" | "state_mismatch";
+export type OAuthErrorCode =
+  "not_configured" | "denied" | "exchange_failed" | "state_mismatch" | "no_instagram_page";
+
+export function isFacebookOAuthConfigured(): boolean {
+  return !!process.env.META_FB_APP_ID && !!process.env.META_FB_APP_SECRET;
+}
+
+function isInstagramLoginConfigured(): boolean {
+  return !!process.env.META_APP_ID && !!process.env.META_APP_SECRET;
+}
 
 export function isOAuthConfigured(): boolean {
-  return !!process.env.META_APP_ID && !!process.env.META_APP_SECRET;
+  return isFacebookOAuthConfigured() || isInstagramLoginConfigured();
+}
+
+/** Provider used for new connections. Facebook always wins when configured. */
+export function activeOAuthProvider(): ConnectionProvider | null {
+  if (isFacebookOAuthConfigured()) return "facebook";
+  if (isInstagramLoginConfigured()) return "instagram";
+  return null;
 }
 
 export function getRedirectUri(): string {
@@ -32,6 +58,10 @@ export function getRedirectUri(): string {
   if (explicit) return explicit;
   const base = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
   return `${base}/api/instagram/callback`;
+}
+
+export function getFacebookRedirectUri(): string {
+  return process.env.META_FB_REDIRECT_URI || getRedirectUri();
 }
 
 export function generateState(): string {
@@ -45,6 +75,22 @@ export function buildAuthorizeUrl(state: string): string {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", SCOPES.join(","));
   url.searchParams.set("state", state);
+  return url.toString();
+}
+
+export function buildFacebookAuthorizeUrl(state: string): string {
+  const url = new URL(FB_AUTHORIZE_URL);
+  url.searchParams.set("client_id", process.env.META_FB_APP_ID ?? "");
+  url.searchParams.set("redirect_uri", getFacebookRedirectUri());
+  url.searchParams.set("state", state);
+  url.searchParams.set("response_type", "code");
+  const configId = process.env.META_FB_CONFIG_ID;
+  if (configId) {
+    url.searchParams.set("config_id", configId);
+    url.searchParams.set("override_default_response_type", "true");
+  } else {
+    url.searchParams.set("scope", FB_SCOPES.join(","));
+  }
   return url.toString();
 }
 
@@ -75,6 +121,28 @@ const meSchema = z.object({
   username: z.string(),
   account_type: z.string().optional(),
   profile_picture_url: z.string().optional(),
+});
+
+const fbTokenSchema = z.object({
+  access_token: z.string(),
+  token_type: z.string().optional(),
+  expires_in: z.number().optional(),
+});
+
+const fbAccountsSchema = z.object({
+  data: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      instagram_business_account: z
+        .object({
+          id: z.string(),
+          username: z.string().optional(),
+          profile_picture_url: z.string().optional(),
+        })
+        .optional(),
+    }),
+  ),
 });
 
 export class OAuthError extends Error {
@@ -164,13 +232,75 @@ export async function exchangeCode(code: string, fetchImpl: typeof fetch = fetch
   };
 }
 
-/** Runs the full code -> long-lived token -> /me exchange and upserts the workspace connection. */
+/** fb_exchange_token grant: short -> long-lived, and also the refresh of a long-lived token. */
+async function fbExchangeToken(token: string, fetchImpl: typeof fetch, step: string) {
+  const url = new URL(FB_TOKEN_URL);
+  url.searchParams.set("grant_type", "fb_exchange_token");
+  url.searchParams.set("client_id", process.env.META_FB_APP_ID ?? "");
+  url.searchParams.set("client_secret", process.env.META_FB_APP_SECRET ?? "");
+  url.searchParams.set("fb_exchange_token", token);
+  const r = parse(fbTokenSchema, await readJson(await fetchImpl(url), step), step);
+  return {
+    accessToken: r.access_token,
+    expiresAt: new Date(Date.now() + (r.expires_in ?? FB_DEFAULT_EXPIRES_IN_SEC) * 1000),
+  };
+}
+
+/** Facebook Login: code -> short token -> long-lived user token -> Page with an Instagram account. */
+export async function exchangeFacebookCode(code: string, fetchImpl: typeof fetch = fetch) {
+  const shortUrl = new URL(FB_TOKEN_URL);
+  shortUrl.searchParams.set("client_id", process.env.META_FB_APP_ID ?? "");
+  shortUrl.searchParams.set("client_secret", process.env.META_FB_APP_SECRET ?? "");
+  shortUrl.searchParams.set("redirect_uri", getFacebookRedirectUri());
+  shortUrl.searchParams.set("code", code);
+  const short = parse(
+    fbTokenSchema,
+    await readJson(await fetchImpl(shortUrl), "code exchange"),
+    "code exchange",
+  );
+
+  const long = await fbExchangeToken(short.access_token, fetchImpl, "long-lived exchange");
+
+  const accountsUrl = new URL(`${FB_GRAPH_HOST}/v21.0/me/accounts`);
+  accountsUrl.searchParams.set(
+    "fields",
+    "id,name,instagram_business_account{id,username,profile_picture_url}",
+  );
+  accountsUrl.searchParams.set("limit", "100");
+  accountsUrl.searchParams.set("access_token", long.accessToken);
+  const accounts = parse(
+    fbAccountsSchema,
+    await readJson(await fetchImpl(accountsUrl), "me/accounts"),
+    "me/accounts",
+  );
+  const ig = accounts.data.find((p) => p.instagram_business_account)?.instagram_business_account;
+  if (!ig) {
+    throw new OAuthError("no_instagram_page", "no page with an Instagram professional account");
+  }
+
+  return {
+    accessToken: long.accessToken,
+    expiresAt: long.expiresAt,
+    igUserId: ig.id,
+    username: ig.username ?? ig.id,
+    accountType: null as string | null,
+    profilePictureUrl: ig.profile_picture_url ?? null,
+    scopes: [...FB_SCOPES] as string[],
+  };
+}
+
+/** Runs the full provider exchange and upserts the workspace connection. */
 export async function completeOAuth(
-  input: { code: string; workspaceId: string; userId: string },
+  input: { code: string; workspaceId: string; userId: string; provider?: ConnectionProvider },
   fetchImpl: typeof fetch = fetch,
 ): Promise<InstagramConnection> {
-  const r = await exchangeCode(input.code, fetchImpl);
+  const provider = input.provider ?? "instagram";
+  const r =
+    provider === "facebook"
+      ? await exchangeFacebookCode(input.code, fetchImpl)
+      : await exchangeCode(input.code, fetchImpl);
   const values = {
+    provider,
     workspaceId: input.workspaceId,
     igUserId: r.igUserId,
     username: r.username,
@@ -218,19 +348,29 @@ export async function refreshIfNeeded(
 ): Promise<InstagramConnection> {
   if (connection.tokenExpiresAt.getTime() >= Date.now() + REFRESH_WINDOW_MS) return connection;
   try {
-    const url = new URL(IG_REFRESH_URL);
-    url.searchParams.set("grant_type", "ig_refresh_token");
-    url.searchParams.set("access_token", decryptToken(connection));
-    const r = parse(
-      longTokenSchema,
-      await readJson(await fetchImpl(url), "token refresh"),
-      "token refresh",
-    );
+    let token: string;
+    let expiresAt: Date;
+    if (connection.provider === "facebook") {
+      const r = await fbExchangeToken(decryptToken(connection), fetchImpl, "token refresh");
+      token = r.accessToken;
+      expiresAt = r.expiresAt;
+    } else {
+      const url = new URL(IG_REFRESH_URL);
+      url.searchParams.set("grant_type", "ig_refresh_token");
+      url.searchParams.set("access_token", decryptToken(connection));
+      const r = parse(
+        longTokenSchema,
+        await readJson(await fetchImpl(url), "token refresh"),
+        "token refresh",
+      );
+      token = r.access_token;
+      expiresAt = new Date(Date.now() + r.expires_in * 1000);
+    }
     const [row] = await db
       .update(instagramConnections)
       .set({
-        accessTokenEnc: encrypt(r.access_token),
-        tokenExpiresAt: new Date(Date.now() + r.expires_in * 1000),
+        accessTokenEnc: encrypt(token),
+        tokenExpiresAt: expiresAt,
         lastRefreshedAt: new Date(),
       })
       .where(eq(instagramConnections.id, connection.id))

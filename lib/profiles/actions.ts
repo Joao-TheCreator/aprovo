@@ -8,8 +8,10 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
 import { importedPosts, profiles } from "@/db/schema";
 import { getCurrentWorkspace, requireUser, requireWorkspaceForProfile } from "@/lib/auth/require";
+import type { IgError } from "@/lib/instagram/types";
 import {
   CONNECT_ERROR_MESSAGES,
+  NO_BUSINESS_DISCOVERY_MESSAGE,
   igUsernameSchema,
   manualImportSchema,
   type ActionResult,
@@ -35,11 +37,19 @@ function revalidate(profileId?: string) {
   if (profileId) revalidatePath(`/perfis/${profileId}`);
 }
 
-function fail(code: ConnectErrorCode, profileId?: string): ConnectProfileResult {
+/** Generic message per code, except the specific "reconnect with Facebook" guidance. */
+function igMessage(error: IgError): string {
+  if (error.code === "provider_down" && error.message === NO_BUSINESS_DISCOVERY_MESSAGE) {
+    return error.message;
+  }
+  return CONNECT_ERROR_MESSAGES[error.code];
+}
+
+function fail(code: ConnectErrorCode, profileId?: string, message?: string): ConnectProfileResult {
   return {
     ok: false,
     code,
-    message: CONNECT_ERROR_MESSAGES[code],
+    message: message ?? CONNECT_ERROR_MESSAGES[code],
     ...(profileId ? { profileId } : {}),
   };
 }
@@ -77,7 +87,7 @@ export async function connectProfile(input: { username: string }): Promise<Conne
 
   const res = await importProfileFromProvider(created.id);
   revalidate(created.id);
-  if (!res.ok) return fail(res.error.code, created.id);
+  if (!res.ok) return fail(res.error.code, created.id, igMessage(res.error));
   return { ok: true, profileId: created.id, imported: res.imported, source: "graph_api" };
 }
 
@@ -241,7 +251,7 @@ export async function refreshProfile(
   revalidate(profileId);
   if (!res.ok) {
     const code = res.error.code;
-    return { ok: false, code, message: CONNECT_ERROR_MESSAGES[code] };
+    return { ok: false, code, message: igMessage(res.error) };
   }
   return { ok: true, data: { imported: res.imported } };
 }

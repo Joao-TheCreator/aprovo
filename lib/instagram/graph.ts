@@ -8,6 +8,7 @@ import {
   meMediaSchema,
   meProfileSchema,
 } from "./mapping";
+import { NO_BUSINESS_DISCOVERY_MESSAGE } from "@/lib/profiles/contracts";
 import type { IgError, IgMediaPage, IgProfile, InstagramProvider } from "./types";
 
 const GRAPH_VERSION = "v21.0";
@@ -29,6 +30,9 @@ export function mapGraphError(status: number, body: unknown): IgError {
   const msg = message.toLowerCase();
   if (code === 4 || code === 17 || code === 32 || code === 613) {
     return { code: "rate_limited", retryAfterSec: 600 };
+  }
+  if (msg.includes("nonexisting field (business_discovery)")) {
+    return { code: "provider_down", message: NO_BUSINESS_DISCOVERY_MESSAGE };
   }
   if (error_subcode === 2207013 || msg.includes("business account") || msg.includes("2207013")) {
     return { code: "private_or_personal" };
@@ -78,6 +82,11 @@ export class GraphBusinessDiscoveryProvider implements InstagramProvider {
   constructor(cfg: GraphProviderConfig) {
     this.cfg = cfg;
     this.fetchImpl = cfg.fetchImpl ?? ((...a) => fetch(...a));
+  }
+
+  /** Own-account node: /me on Instagram Login; the Instagram user id on the Facebook host. */
+  private ownNode(): string {
+    return this.cfg.host === INSTAGRAM_GRAPH_HOST ? "me" : this.cfg.igUserId;
   }
 
   private isOwn(username: string): boolean {
@@ -130,7 +139,7 @@ export class GraphBusinessDiscoveryProvider implements InstagramProvider {
   private async ownMedia(cursor?: string): Promise<IgMediaPage | IgError> {
     const params: Record<string, string> = { fields: ME_MEDIA_FIELDS, limit: "36" };
     if (cursor) params.after = cursor;
-    const body = await this.get("me/media", params);
+    const body = await this.get(`${this.ownNode()}/media`, params);
     if (isErr(body)) return body;
     const parsed = meMediaSchema.safeParse(body);
     if (!parsed.success) {
@@ -140,7 +149,7 @@ export class GraphBusinessDiscoveryProvider implements InstagramProvider {
   }
 
   private async ownProfile(): Promise<IgProfile | IgError> {
-    const body = await this.get("me", { fields: ME_PROFILE_FIELDS });
+    const body = await this.get(this.ownNode(), { fields: ME_PROFILE_FIELDS });
     if (isErr(body)) return body;
     const parsed = meProfileSchema.safeParse(body);
     if (!parsed.success) {

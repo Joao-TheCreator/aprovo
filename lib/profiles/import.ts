@@ -5,6 +5,7 @@ import { downloadImage } from "@/lib/instagram/download";
 import { getInstagramProviderForWorkspace } from "@/lib/instagram";
 import type { IgError, IgMedia, IgProfile } from "@/lib/instagram/types";
 import { isIgError } from "@/lib/instagram/types";
+import { NO_BUSINESS_DISCOVERY_MESSAGE } from "./contracts";
 import { storeCachedImage } from "./thumbs";
 
 export type ImportResult = { ok: true; imported: number } | { ok: false; error: IgError };
@@ -23,7 +24,9 @@ export function importErrorMessage(e: IgError): string {
     case "not_configured":
       return "A importação automática não está configurada.";
     case "provider_down":
-      return "O Instagram não respondeu à importação.";
+      return e.message === NO_BUSINESS_DISCOVERY_MESSAGE
+        ? e.message
+        : "O Instagram não respondeu à importação.";
   }
 }
 

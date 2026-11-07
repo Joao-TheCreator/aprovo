@@ -50,7 +50,7 @@ export async function getInstagramProviderForWorkspace(
     try {
       const connection = await refreshIfNeeded(stored);
       return new GraphBusinessDiscoveryProvider({
-        host: INSTAGRAM_GRAPH_HOST,
+        host: connection.provider === "facebook" ? FACEBOOK_GRAPH_HOST : INSTAGRAM_GRAPH_HOST,
         igUserId: connection.igUserId,
         accessToken: decryptToken(connection),
         ownUsername: connection.username,

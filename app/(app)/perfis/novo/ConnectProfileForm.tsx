@@ -16,7 +16,7 @@ import {
 } from "@/lib/profiles/contracts";
 import { connectProfile, createProfileWithoutFeed } from "@/lib/profiles/actions";
 
-type FormError = { code: ConnectErrorCode; profileId?: string };
+type FormError = { code: ConnectErrorCode; profileId?: string; message?: string };
 
 const FALLBACK_CODES: ConnectErrorCode[] = [
   "private_or_personal",
@@ -45,7 +45,7 @@ export function ConnectProfileForm() {
         toast.success("Perfil conectado");
         router.push(`/perfis/${res.profileId}`);
       } else {
-        setError({ code: res.code, profileId: res.profileId });
+        setError({ code: res.code, profileId: res.profileId, message: res.message });
       }
     });
   }
@@ -135,7 +135,7 @@ export function ConnectProfileForm() {
 
       {error ? (
         <div role="alert" className="bg-lavanda flex flex-col gap-3 rounded-2xl p-4">
-          <p className="text-[15px]">{CONNECT_ERROR_MESSAGES[error.code]}</p>
+          <p className="text-[15px]">{error.message ?? CONNECT_ERROR_MESSAGES[error.code]}</p>
           {error.code === "already_connected" ? (
             error.profileId ? (
               <Button asChild variant="secondary">

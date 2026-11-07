@@ -29,8 +29,10 @@ profile_picture_url,website,followers_count,follows_count,media_count,
 media{id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,like_count,
 comments_count,children{media_url,media_type}}}`
 
-- **Continua disponível** (a doc da versão Facebook Login foi atualizada em agosto de 2026).
-  Disponibilidade na versão Instagram Login: **[confirmar]**; se não houver, usar Facebook Login.
+- **Continua disponível** na versão Facebook Login (doc atualizada em agosto de 2026).
+  **Confirmado em 06/11/2026: não existe na versão Instagram Login** (`graph.instagram.com`
+  responde `Tried accessing nonexisting field (business_discovery)`). Por isso o APROVO usa
+  Login do Facebook (ADR-008).
 - `{ig-user-id}` é a conta profissional **do próprio APROVO** (conta ponte da CPCann). O alvo
   pode ser **qualquer conta Business ou Creator pública**. O cliente não faz login.
 - **Limitação principal:** se o alvo for **conta pessoal**, a chamada falha. É o motivo do

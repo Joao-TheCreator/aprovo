@@ -4,7 +4,11 @@ import { PhoneFrame } from "@/components/app/PhoneFrame";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getCurrentWorkspace, requireUser } from "@/lib/auth/require";
-import { getWorkspaceConnection, isOAuthConfigured } from "@/lib/instagram/oauth";
+import {
+  activeOAuthProvider,
+  getWorkspaceConnection,
+  isOAuthConfigured,
+} from "@/lib/instagram/oauth";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import { DisconnectButton } from "./DisconnectButton";
 
@@ -16,6 +20,8 @@ const ERRORS: Record<string, string> = {
   denied: "A autorização foi cancelada no Instagram.",
   exchange_failed: "Não foi possível concluir a conexão com o Instagram. Tente novamente.",
   state_mismatch: "A sessão de conexão expirou ou é inválida. Tente conectar novamente.",
+  no_instagram_page:
+    "Nenhuma Página do Facebook ligada a uma conta profissional do Instagram foi encontrada. No Instagram, vá em Configurações › Contas vinculadas e vincule uma Página do Facebook, depois tente de novo.",
 };
 
 function formatDate(d: Date) {
@@ -44,6 +50,8 @@ export default async function ConfiguracoesPage({
   const ws = await getCurrentWorkspace(user.id!);
   const connection = ws ? await getWorkspaceConnection(ws.id) : null;
   const configured = isOAuthConfigured();
+  const activeProvider = activeOAuthProvider();
+  const legacyConnection = connection?.provider === "instagram" && activeProvider === "facebook";
   const error = sp.error ? (ERRORS[sp.error] ?? ERRORS.exchange_failed) : null;
 
   return (
@@ -86,6 +94,12 @@ export default async function ConfiguracoesPage({
                 </p>
               </div>
             </div>
+            {legacyConnection ? (
+              <p role="status" className="bg-secondary rounded-xl px-4 py-3 text-sm">
+                Esta conexão usa o login antigo e só carrega o seu próprio feed. Reconecte com o
+                Facebook para importar perfis de clientes.
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-3">
               <Button asChild variant="secondary">
                 {/* API route (redirect to Instagram), not a page: plain anchor is intended. */}
@@ -97,8 +111,10 @@ export default async function ConfiguracoesPage({
         ) : (
           <>
             <p className="text-muted-foreground text-sm">
-              Conecte uma conta profissional (Criador ou Empresa) para carregar feeds pela API
-              oficial da Meta. Em modo de desenvolvimento, a conta precisa ser testadora do app.
+              {activeProvider === "facebook"
+                ? "Conecte com o Facebook uma conta profissional do Instagram (Criador ou Empresa) vinculada a uma Página do Facebook, para carregar feeds pela API oficial da Meta."
+                : "Conecte uma conta profissional (Criador ou Empresa) para carregar feeds pela API oficial da Meta."}{" "}
+              Em modo de desenvolvimento, a conta precisa ser testadora do app.
             </p>
             {configured ? (
               <Button asChild className="self-start">
@@ -110,7 +126,7 @@ export default async function ConfiguracoesPage({
                   Conectar Instagram
                 </Button>
                 <p className="text-muted-foreground text-sm">
-                  Configure META_APP_ID e META_APP_SECRET no servidor.
+                  Configure META_FB_APP_ID e META_FB_APP_SECRET no servidor.
                 </p>
               </>
             )}

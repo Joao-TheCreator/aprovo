@@ -78,6 +78,36 @@ futuro se o piloto pedir.
 **Consequências:** fiel ao Instagram (novo em cima); ancoragem entre importados fica para
 etapa futura.
 
+### ADR-008 · Conexão do Instagram via Login do Facebook (06/11/2026)
+**Contexto:** a validação em produção mostrou que a API do Instagram **com Login do Instagram**
+(`graph.instagram.com`) não expõe `business_discovery`: a Graph API responde
+`Tried accessing nonexisting field (business_discovery)` (code 100). Com ela só o feed da
+própria conta conectada carrega; o fluxo central do produto (digitar o @ do cliente) não
+funciona. Business Discovery existe apenas na API **com Login do Facebook**
+(`graph.facebook.com`), que exige a conta profissional ligada a uma Página do Facebook.
+**Decisão do João:** migrar para Login do Facebook.
+**Como fazemos:**
+- OAuth em `https://www.facebook.com/v21.0/dialog/oauth` com escopos `instagram_basic`,
+  `pages_show_list`, `pages_read_engagement` (ou `config_id` de "Login do Facebook para
+  Empresas" quando `META_FB_CONFIG_ID` estiver definido).
+- Troca do `code` em `graph.facebook.com/v21.0/oauth/access_token`; depois
+  `grant_type=fb_exchange_token` para o token de usuário de longa duração (60 dias).
+- A conta do Instagram vem de `/me/accounts?fields=instagram_business_account{...}`; a
+  primeira Página com `instagram_business_account` é usada. Sem Página ligada, o callback
+  devolve o erro `no_instagram_page` com orientação na tela.
+- O cron semanal renova o token repetindo `fb_exchange_token` com o token atual.
+- A tabela `instagram_connections` ganha a coluna `provider` (`instagram` | `facebook`).
+  Conexões antigas continuam lendo só a própria conta em `graph.instagram.com` até o usuário
+  reconectar; a tela de Configurações pede a reconexão.
+- Variáveis novas: `META_FB_APP_ID`, `META_FB_APP_SECRET`, `META_FB_CONFIG_ID` (opcional).
+  `META_APP_ID`/`META_APP_SECRET` (Instagram Login) ficam como legado.
+**Alternativas descartadas:** manter Instagram Login só com importação manual (perde a
+automação do fluxo principal); cada cliente autorizar o app (sem convite de workspace no MVP);
+provedor de scraping (ADR-003: desligado por decisão do João).
+**Consequências:** cada social media precisa de uma Página do Facebook ligada ao Instagram
+profissional dela (gratuito, feito no Instagram em Configurações › Contas vinculadas). App
+Review passa a cobrir `instagram_basic` e `pages_*` quando sair do modo de desenvolvimento.
+
 ## Riscos
 
 | # | Risco | Prob. | Impacto | Mitigação |

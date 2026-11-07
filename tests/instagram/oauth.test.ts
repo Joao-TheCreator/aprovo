@@ -9,7 +9,9 @@ import {
   isGraphConfiguredForWorkspace,
 } from "@/lib/instagram";
 import {
+  activeOAuthProvider,
   buildAuthorizeUrl,
+  buildFacebookAuthorizeUrl,
   completeOAuth,
   getWorkspaceConnection,
   refreshIfNeeded,
@@ -74,6 +76,42 @@ function metaFetch(calls: string[] = []) {
   });
 }
 
+type FbAccounts = { id: string; instagram_business_account?: { id: string; username: string } }[];
+
+function facebookFetch(calls: string[] = [], pages?: FbAccounts) {
+  return vi.fn(async (input: URL | string | Request) => {
+    const url = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input : input.url,
+    );
+    calls.push(`${url.origin}${url.pathname}${url.searchParams.get("grant_type") ?? ""}`);
+    if (url.origin !== "https://graph.facebook.com") {
+      return json({ error: { message: "unexpected host " + url.origin } }, 400);
+    }
+    if (url.pathname === "/v21.0/oauth/access_token") {
+      if (url.searchParams.get("grant_type") === "fb_exchange_token") {
+        const prev = url.searchParams.get("fb_exchange_token");
+        return json({
+          access_token: prev === "FBSHORT" ? "FBLONG" : "FBREFRESHED",
+          expires_in: 5184000,
+        });
+      }
+      return json({ access_token: "FBSHORT", token_type: "bearer" });
+    }
+    if (url.pathname === "/v21.0/me/accounts") {
+      return json({
+        data: pages ?? [
+          { id: "p1" },
+          {
+            id: "p2",
+            instagram_business_account: { id: "17841499999999999", username: "elim" },
+          },
+        ],
+      });
+    }
+    return json({ error: { message: "unexpected " + url.pathname } }, 400);
+  });
+}
+
 let workspaceId: string;
 let userId: string;
 
@@ -83,6 +121,10 @@ beforeAll(() => {
 beforeEach(async () => {
   process.env.META_APP_ID = "app-id";
   process.env.META_APP_SECRET = "app-secret";
+  process.env.META_FB_APP_ID = "fb-app-id";
+  process.env.META_FB_APP_SECRET = "fb-app-secret";
+  delete process.env.META_FB_CONFIG_ID;
+  delete process.env.META_FB_REDIRECT_URI;
   process.env.META_REDIRECT_URI = "http://localhost:3000/api/instagram/callback";
   delete process.env.META_GRAPH_ACCESS_TOKEN;
   delete process.env.META_IG_USER_ID;
@@ -111,6 +153,70 @@ describe("authorize url and state", () => {
     expect(statesMatch("abc", "abd")).toBe(false);
     expect(statesMatch(undefined, "abc")).toBe(false);
     expect(statesMatch("abc", null)).toBe(false);
+  });
+});
+
+describe("facebook authorize url", () => {
+  it("prefers Facebook as the active provider when configured", () => {
+    expect(activeOAuthProvider()).toBe("facebook");
+    delete process.env.META_FB_APP_ID;
+    expect(activeOAuthProvider()).toBe("instagram");
+    delete process.env.META_APP_ID;
+    expect(activeOAuthProvider()).toBeNull();
+  });
+
+  it("sends scopes when no config id is set", () => {
+    const url = new URL(buildFacebookAuthorizeUrl("st"));
+    expect(url.origin + url.pathname).toBe("https://www.facebook.com/v21.0/dialog/oauth");
+    expect(url.searchParams.get("client_id")).toBe("fb-app-id");
+    expect(url.searchParams.get("scope")).toBe(
+      "instagram_basic,pages_show_list,pages_read_engagement",
+    );
+    expect(url.searchParams.get("config_id")).toBeNull();
+    expect(url.searchParams.get("state")).toBe("st");
+    expect(url.searchParams.get("response_type")).toBe("code");
+  });
+
+  it("uses config_id instead of scope when META_FB_CONFIG_ID is set", () => {
+    process.env.META_FB_CONFIG_ID = "cfg-1";
+    const url = new URL(buildFacebookAuthorizeUrl("st"));
+    expect(url.searchParams.get("config_id")).toBe("cfg-1");
+    expect(url.searchParams.get("override_default_response_type")).toBe("true");
+    expect(url.searchParams.get("scope")).toBeNull();
+  });
+});
+
+describe("completeOAuth with Facebook", () => {
+  it("exchanges code, long-lived token and /me/accounts, storing provider facebook", async () => {
+    const calls: string[] = [];
+    const f = facebookFetch(calls);
+    await completeOAuth(
+      { code: "CODE", workspaceId, userId, provider: "facebook" },
+      f as unknown as typeof fetch,
+    );
+    expect(calls).toEqual([
+      "https://graph.facebook.com/v21.0/oauth/access_token",
+      "https://graph.facebook.com/v21.0/oauth/access_tokenfb_exchange_token",
+      "https://graph.facebook.com/v21.0/me/accounts",
+    ]);
+    const [stored] = await testDb.select().from(instagramConnections);
+    expect(stored.provider).toBe("facebook");
+    expect(stored.igUserId).toBe("17841499999999999");
+    expect(stored.username).toBe("elim");
+    expect(stored.accessTokenEnc).not.toContain("FBLONG");
+    expect(decrypt(stored.accessTokenEnc)).toBe("FBLONG");
+    expect(stored.tokenExpiresAt.getTime()).toBeGreaterThan(Date.now() + 59 * 86400_000);
+  });
+
+  it("throws no_instagram_page when no Page has an Instagram account", async () => {
+    const f = facebookFetch([], [{ id: "p1" }]);
+    await expect(
+      completeOAuth(
+        { code: "CODE", workspaceId, userId, provider: "facebook" },
+        f as unknown as typeof fetch,
+      ),
+    ).rejects.toMatchObject({ code: "no_instagram_page" });
+    expect(await testDb.select().from(instagramConnections)).toHaveLength(0);
   });
 });
 
@@ -167,7 +273,7 @@ describe("callback route", () => {
     vi.stubGlobal("fetch", metaFetch());
     const ok = await GET(
       new NextRequest("http://localhost:3000/api/instagram/callback?code=c%23_&state=s1", {
-        headers: { cookie: "ig_oauth_state=s1" },
+        headers: { cookie: "ig_oauth_state=s1; ig_oauth_provider=instagram" },
       }),
     );
     expect(ok.headers.get("location")).toContain("/configuracoes?connected=1");
@@ -210,6 +316,25 @@ describe("refreshIfNeeded", () => {
     expect(decrypt((await getWorkspaceConnection(workspaceId))!.accessTokenEnc)).toBe("REFRESHED");
   });
 
+  it("refreshes a facebook connection with fb_exchange_token", async () => {
+    await completeOAuth(
+      { code: "c", workspaceId, userId, provider: "facebook" },
+      facebookFetch() as unknown as typeof fetch,
+    );
+    await testDb
+      .update(instagramConnections)
+      .set({ tokenExpiresAt: new Date(Date.now() + 3 * 86400_000) })
+      .where(eq(instagramConnections.workspaceId, workspaceId));
+    const c = (await getWorkspaceConnection(workspaceId))!;
+    const calls: string[] = [];
+    const f = facebookFetch(calls);
+    const out = await refreshIfNeeded(c, f as unknown as typeof fetch);
+    expect(calls).toEqual(["https://graph.facebook.com/v21.0/oauth/access_tokenfb_exchange_token"]);
+    expect(decrypt(out.accessTokenEnc)).toBe("FBREFRESHED");
+    expect(out.provider).toBe("facebook");
+    expect(out.tokenExpiresAt.getTime()).toBeGreaterThan(Date.now() + 59 * 86400_000);
+  });
+
   it("keeps the connection when refresh fails", async () => {
     const c = await seed(2);
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -220,6 +345,28 @@ describe("refreshIfNeeded", () => {
 });
 
 describe("provider resolution", () => {
+  it("reads the own account through the Instagram user id on the Facebook host", async () => {
+    await completeOAuth(
+      { code: "c", workspaceId, userId, provider: "facebook" },
+      facebookFetch() as unknown as typeof fetch,
+    );
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL) => {
+        seen.push(`${input.origin}${input.pathname}`);
+        if (input.pathname.endsWith("/media")) return json({ data: [] });
+        return json({ username: "elim" });
+      }),
+    );
+    const provider = await getInstagramProviderForWorkspace(workspaceId);
+    await provider.fetchProfile("elim");
+    expect(seen).toEqual([
+      "https://graph.facebook.com/v21.0/17841499999999999",
+      "https://graph.facebook.com/v21.0/17841499999999999/media",
+    ]);
+  });
+
   it("uses the workspace connection over env, with the own-account path via /me", async () => {
     process.env.META_GRAPH_ACCESS_TOKEN = "ENV";
     process.env.META_IG_USER_ID = "999";
