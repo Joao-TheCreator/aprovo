@@ -4,16 +4,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+/** Badge / chip (docs/14, "Chips"). v1 variants kept; `brand`, `warning`, `glass` added. */
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap [&>svg]:size-3.5",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-full border px-2.5 py-1 text-caption whitespace-nowrap [&>svg]:size-3.5",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-primary text-primary-foreground",
-        secondary: "border-transparent bg-secondary text-secondary-foreground",
-        success: "border-transparent bg-success text-success-foreground",
-        destructive: "border-transparent bg-destructive text-destructive-foreground",
-        outline: "border-border bg-card text-muted-foreground",
+        default: "bg-gradient-brand text-on-brand border-transparent",
+        secondary: "bg-surface-2 text-foreground border-transparent",
+        success: "bg-success text-success-foreground border-transparent",
+        destructive: "bg-destructive text-destructive-foreground border-transparent",
+        outline: "border-outline-strong text-muted-foreground bg-transparent",
+        brand: "bg-brand-soft text-brand-ink border-transparent",
+        warning: "bg-warning text-ink border-transparent",
+        glass: "glass text-foreground border-white/10",
       },
     },
     defaultVariants: { variant: "default" },

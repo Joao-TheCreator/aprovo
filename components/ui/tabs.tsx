@@ -19,7 +19,7 @@ function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimi
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
-      className={cn("bg-secondary inline-flex h-11 items-center gap-1 rounded-full p-1", className)}
+      className={cn("bg-surface-2 inline-flex h-12 items-center gap-1 rounded-full p-1", className)}
       {...props}
     />
   );
@@ -30,7 +30,7 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "text-muted-foreground focus-visible:ring-ring/50 data-[state=active]:bg-card data-[state=active]:text-primary inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold whitespace-nowrap transition-colors outline-none focus-visible:ring-[3px] [&_svg]:size-5",
+        "text-muted-foreground hover:text-foreground focus-visible:ring-ring data-[state=active]:bg-gradient-brand data-[state=active]:text-on-brand data-[state=active]:shadow-glow inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full px-4 text-sm font-bold whitespace-nowrap transition-[color,box-shadow] duration-(--ap-dur-base) outline-none focus-visible:ring-2 active:scale-[0.97] [&_svg]:size-5",
         className,
       )}
       {...props}
@@ -42,7 +42,7 @@ function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPr
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("outline-none", className)}
+      className={cn("data-[state=active]:animate-fade-in outline-none", className)}
       {...props}
     />
   );

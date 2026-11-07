@@ -18,7 +18,10 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
-      className={cn("bg-ink/50 fixed inset-0 z-50", className)}
+      className={cn(
+        "bg-scrim data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in fixed inset-0 z-50 backdrop-blur-sm",
+        className,
+      )}
       {...props}
     />
   );
@@ -35,13 +38,13 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "border-border bg-card fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border p-6 shadow-lg outline-none",
+          "bg-card text-card-foreground shadow-sheet data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-4xl border border-white/10 p-6 outline-none",
           className,
         )}
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-4 right-4 rounded-full p-1 outline-none focus-visible:ring-[3px]">
+        <DialogPrimitive.Close className="press bg-surface-2 text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute top-4 right-4 flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2">
           <XIcon className="size-5" strokeWidth={1.75} />
           <span className="sr-only">Fechar</span>
         </DialogPrimitive.Close>
@@ -70,7 +73,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg font-semibold", className)}
+      className={cn("font-display text-h2 pr-12", className)}
       {...props}
     />
   );
@@ -83,7 +86,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-muted-foreground text-[15px]", className)}
+      className={cn("text-muted-foreground text-body", className)}
       {...props}
     />
   );

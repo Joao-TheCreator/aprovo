@@ -1,6 +1,15 @@
-# 09 · Design system
+# 09 · Design system (v1)
 
-Base: slide "Identidade visual" do briefing. Tudo que não é a simulação do Instagram usa estes
+> **Este documento é a v1 e não é mais o sistema atual.** O design system vigente é o
+> **v2 "Gen Z"**, em [`docs/14-redesign-gen-z.md`](14-redesign-gen-z.md): tema escuro primeiro
+> com modo claro, Unbounded + Plus Jakarta Sans, gradientes e glow, novos componentes base e a
+> lista de rótulos congelados dos testes. O DNA abaixo (roxo `#6A00FF`, roxo-apoio `#9B3CFF`,
+> verde `#22E688`, lavanda `#EDE7FF`, ink `#1C1633`, logo) continua sendo a origem da v2; os
+> nomes `--aprovo-*` e as classes `bg-lavanda`, `text-roxo`, `text-ink-2` seguem existindo como
+> aliases sensíveis ao tema até as telas migrarem. Mudanças de identidade continuam precisando
+> de aprovação do João.
+
+Base (v1): slide "Identidade visual" do briefing. Tudo que não é a simulação do Instagram usa estes
 tokens. A simulação do Instagram usa as cores do próprio Instagram (fundo branco, texto preto,
 botão azul aproximado `#4150F7`) para ser fiel.
 
@@ -18,8 +27,8 @@ botão azul aproximado `#4150F7`) para ser fiel.
 | `--aprovo-borda` | `#DDD6F3` | Bordas e divisores |
 | `--aprovo-erro` | `#FF3B5C` | Erros e exclusão |
 
-Dark mode: fora do MVP (o Instagram simulado continua claro). Preparar tokens em `:root` para
-não bloquear.
+Dark mode: fora do MVP na v1. Na v2 o app é dark-first; o Instagram simulado continua claro
+(ilha `data-theme="light"`).
 
 ## Status de publicação
 

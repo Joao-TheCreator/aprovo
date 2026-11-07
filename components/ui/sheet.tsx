@@ -19,24 +19,35 @@ function SheetOverlay({
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
-      className={cn("bg-ink/50 fixed inset-0 z-50", className)}
+      className={cn(
+        "bg-scrim data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in fixed inset-0 z-50 backdrop-blur-sm",
+        className,
+      )}
       {...props}
     />
   );
 }
 
-const sheetVariants = cva("fixed z-50 flex flex-col gap-4 bg-card p-6 shadow-lg outline-none", {
-  variants: {
-    side: {
-      bottom:
-        "inset-x-0 bottom-0 max-h-[90dvh] rounded-t-3xl pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-      right: "inset-y-0 right-0 h-full w-3/4 max-w-sm border-l border-border",
-      left: "inset-y-0 left-0 h-full w-3/4 max-w-sm border-r border-border",
-      top: "inset-x-0 top-0 rounded-b-3xl",
+/**
+ * Sheet v2 (docs/14, "Sheets"): glass surface, springy entrance, grab handle on the bottom
+ * sheet. Same API as v1.
+ */
+const sheetVariants = cva(
+  "glass text-card-foreground shadow-sheet fixed z-50 flex flex-col gap-4 border-white/10 p-6 outline-none",
+  {
+    variants: {
+      side: {
+        bottom:
+          "data-[state=open]:animate-sheet-in data-[state=closed]:animate-sheet-out inset-x-0 bottom-0 max-h-[90dvh] overflow-y-auto rounded-t-4xl border-t pt-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
+        right:
+          "data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out inset-y-0 right-0 h-full w-3/4 max-w-sm border-l",
+        left: "data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out inset-y-0 left-0 h-full w-3/4 max-w-sm border-r",
+        top: "data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out inset-x-0 top-0 rounded-b-4xl border-b",
+      },
     },
+    defaultVariants: { side: "bottom" },
   },
-  defaultVariants: { side: "bottom" },
-});
+);
 
 function SheetContent({
   className,
@@ -52,8 +63,14 @@ function SheetContent({
         className={cn(sheetVariants({ side }), className)}
         {...props}
       >
+        {(side ?? "bottom") === "bottom" ? (
+          <span
+            aria-hidden
+            className="bg-outline-strong/60 absolute top-2.5 left-1/2 h-1.5 w-11 -translate-x-1/2 rounded-full"
+          />
+        ) : null}
         {children}
-        <SheetPrimitive.Close className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-4 right-4 rounded-full p-1 outline-none focus-visible:ring-[3px]">
+        <SheetPrimitive.Close className="press bg-surface-2 text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute top-4 right-4 flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2">
           <XIcon className="size-5" strokeWidth={1.75} />
           <span className="sr-only">Fechar</span>
         </SheetPrimitive.Close>
@@ -82,7 +99,7 @@ function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPr
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn("text-lg font-semibold", className)}
+      className={cn("font-display text-h2 pr-12", className)}
       {...props}
     />
   );
@@ -95,7 +112,7 @@ function SheetDescription({
   return (
     <SheetPrimitive.Description
       data-slot="sheet-description"
-      className={cn("text-muted-foreground text-[15px]", className)}
+      className={cn("text-muted-foreground text-body", className)}
       {...props}
     />
   );

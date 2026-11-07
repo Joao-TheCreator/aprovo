@@ -1,48 +1,205 @@
 @import "tailwindcss";
 
 /*
-  Tokens do design system do APROVO (docs/09-design-system.md).
-  Tudo que não é a simulação do Instagram usa estes tokens.
+  APROVO · design system v2 "Gen Z" (docs/14-redesign-gen-z.md).
+  Dark-first, com modo claro. Tokens crus têm prefixo --ap-; os nomes do shadcn/ui
+  (--background, --primary...) são aliases semânticos para os componentes antigos continuarem
+  compilando e mudando de cara sozinhos.
+
+  Tema: segue o sistema por padrão. `data-theme="light" | "dark"` no <html> força um modo
+  (ThemeToggle grava em localStorage). Qualquer elemento com data-theme vira uma ilha daquele
+  tema (ex.: a simulação do Instagram usa data-theme="light").
 */
+
+/* Dark variant: data-theme forçado ou sistema escuro sem data-theme="light" na raiz. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+/* ---------- Tokens fixos (iguais nos dois modos) ---------- */
 :root {
-  --aprovo-roxo: #6a00ff;
+  /* DNA da marca (v1) */
+  --aprovo-roxo-base: #6a00ff;
   --aprovo-roxo-apoio: #9b3cff;
   --aprovo-verde: #22e688;
-  --aprovo-verde-ink: #0b3d26;
-  --aprovo-lavanda: #ede7ff;
-  --aprovo-offwhite: #f8f7ff;
   --aprovo-ink: #1c1633;
-  --aprovo-ink-2: #6b6584;
-  --aprovo-borda: #ddd6f3;
-  --aprovo-erro: #ff3b5c;
-  --aprovo-surface: #ffffff;
 
-  /* semântica usada pelos componentes (shadcn/ui lê estes nomes) */
-  --background: var(--aprovo-offwhite);
-  --foreground: var(--aprovo-ink);
-  --card: var(--aprovo-surface);
-  --card-foreground: var(--aprovo-ink);
-  --popover: var(--aprovo-surface);
-  --popover-foreground: var(--aprovo-ink);
-  --primary: var(--aprovo-roxo);
-  --primary-foreground: #ffffff;
-  --secondary: var(--aprovo-lavanda);
-  --secondary-foreground: var(--aprovo-roxo);
-  --muted: var(--aprovo-lavanda);
-  --muted-foreground: var(--aprovo-ink-2);
-  --accent: var(--aprovo-lavanda);
-  --accent-foreground: var(--aprovo-roxo);
-  --destructive: var(--aprovo-erro);
+  --ap-ink: #140f26; /* texto sobre preenchimentos claros (verde, amarelo) */
+  --ap-on-brand: #ffffff; /* texto sobre roxo / gradiente */
+  --ap-brand-2: #22e688; /* verde elétrico */
+  --ap-success: #22e688;
+  --ap-warning: #ffb020;
+  --ap-danger: #c70d31;
+
+  --ap-gradient-brand: linear-gradient(135deg, #6a00ff 0%, #8418ff 50%, #9b3cff 100%);
+  --ap-gradient-success: linear-gradient(135deg, #22e688 0%, #7dffb9 100%);
+  --ap-gradient-aurora:
+    radial-gradient(60% 50% at 15% 10%, rgb(106 0 255 / 0.45) 0%, transparent 70%),
+    radial-gradient(50% 40% at 90% 20%, rgb(155 60 255 / 0.35) 0%, transparent 70%),
+    radial-gradient(45% 35% at 70% 95%, rgb(34 230 136 / 0.25) 0%, transparent 70%);
+
+  /* Movimento */
+  --ap-dur-instant: 90ms;
+  --ap-dur-fast: 160ms;
+  --ap-dur-base: 240ms;
+  --ap-dur-slow: 420ms;
+  --ap-dur-sheet: 380ms;
+
+  /* Raio base (shadcn) — superfícies "chunky" */
+  --radius: 1.375rem;
+}
+
+/* ---------- Modo claro ---------- */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --ap-bg: #f7f5ff;
+  --ap-surface: #ffffff;
+  --ap-surface-2: #efeaff;
+  --ap-glass: rgb(255 255 255 / 0.72);
+  --ap-text: #140f26;
+  --ap-text-muted: #5e5878;
+  --ap-brand: #6a00ff;
+  --ap-brand-ink: #6a00ff;
+  --ap-brand-soft: #ede7ff;
+  --ap-success-ink: #0a7a45;
+  --ap-warning-ink: #8a5a00;
+  --ap-danger-ink: #c70d31;
+  --ap-outline: #e2dcf5;
+  --ap-outline-strong: #8e86ad;
+  --ap-ring: #6a00ff;
+  --ap-scrim: rgb(20 15 38 / 0.45);
+  --ap-glow: rgb(106 0 255 / 0.28);
+  --ap-glow-success: rgb(34 230 136 / 0.35);
+  --ap-glow-danger: rgb(199 13 49 / 0.25);
+
+  --ap-status-draft: #7a7299;
+  --ap-status-pending: #9b3cff;
+  --ap-status-approved: #0b8f57;
+  --ap-status-changes: #b86e00;
+  --ap-status-scheduled: #6a00ff;
+  --ap-status-published: #0a84c6;
+  --ap-status-failed: #c70d31;
+
+  --ap-shadow-card: 0 1px 2px rgb(20 15 38 / 0.06), 0 8px 24px -12px rgb(20 15 38 / 0.18);
+  --ap-shadow-sheet: 0 -12px 48px -12px rgb(20 15 38 / 0.25);
+}
+
+/* ---------- Modo escuro (padrão de design) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ap-bg: #0b0816;
+    --ap-surface: #151027;
+    --ap-surface-2: #201838;
+    --ap-glass: rgb(21 16 39 / 0.72);
+    --ap-text: #f5f2ff;
+    --ap-text-muted: #a9a2c4;
+    --ap-brand: #7c2bff;
+    --ap-brand-ink: #a77bff;
+    --ap-brand-soft: #241a45;
+    --ap-success-ink: #22e688;
+    --ap-warning-ink: #ffc24d;
+    --ap-danger-ink: #ff6b85;
+    --ap-outline: #2e2550;
+    --ap-outline-strong: #6b5f99;
+    --ap-ring: #22e688;
+    --ap-scrim: rgb(5 3 12 / 0.6);
+    --ap-glow: rgb(124 43 255 / 0.55);
+    --ap-glow-success: rgb(34 230 136 / 0.45);
+    --ap-glow-danger: rgb(255 107 133 / 0.35);
+
+    --ap-status-draft: #8e86ad;
+    --ap-status-pending: #b36bff;
+    --ap-status-approved: #22e688;
+    --ap-status-changes: #ffb020;
+    --ap-status-scheduled: #a77bff;
+    --ap-status-published: #2ec5ff;
+    --ap-status-failed: #ff6b85;
+
+    --ap-shadow-card: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 12px 32px -16px rgb(0 0 0 / 0.7);
+    --ap-shadow-sheet: 0 -16px 64px -16px rgb(0 0 0 / 0.8);
+  }
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ap-bg: #0b0816;
+  --ap-surface: #151027;
+  --ap-surface-2: #201838;
+  --ap-glass: rgb(21 16 39 / 0.72);
+  --ap-text: #f5f2ff;
+  --ap-text-muted: #a9a2c4;
+  --ap-brand: #7c2bff;
+  --ap-brand-ink: #a77bff;
+  --ap-brand-soft: #241a45;
+  --ap-success-ink: #22e688;
+  --ap-warning-ink: #ffc24d;
+  --ap-danger-ink: #ff6b85;
+  --ap-outline: #2e2550;
+  --ap-outline-strong: #6b5f99;
+  --ap-ring: #22e688;
+  --ap-scrim: rgb(5 3 12 / 0.6);
+  --ap-glow: rgb(124 43 255 / 0.55);
+  --ap-glow-success: rgb(34 230 136 / 0.45);
+  --ap-glow-danger: rgb(255 107 133 / 0.35);
+
+  --ap-status-draft: #8e86ad;
+  --ap-status-pending: #b36bff;
+  --ap-status-approved: #22e688;
+  --ap-status-changes: #ffb020;
+  --ap-status-scheduled: #a77bff;
+  --ap-status-published: #2ec5ff;
+  --ap-status-failed: #ff6b85;
+
+  --ap-shadow-card: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 12px 32px -16px rgb(0 0 0 / 0.7);
+  --ap-shadow-sheet: 0 -16px 64px -16px rgb(0 0 0 / 0.8);
+}
+
+/* ---------- Aliases semânticos (shadcn/ui e telas v1) ---------- */
+:root,
+[data-theme] {
+  --background: var(--ap-bg);
+  --foreground: var(--ap-text);
+  --card: var(--ap-surface);
+  --card-foreground: var(--ap-text);
+  --popover: var(--ap-surface);
+  --popover-foreground: var(--ap-text);
+  --primary: var(--ap-brand);
+  --primary-foreground: var(--ap-on-brand);
+  --secondary: var(--ap-surface-2);
+  --secondary-foreground: var(--ap-text);
+  --muted: var(--ap-surface-2);
+  --muted-foreground: var(--ap-text-muted);
+  --accent: var(--ap-brand-soft);
+  --accent-foreground: var(--ap-brand-ink);
+  --destructive: var(--ap-danger);
   --destructive-foreground: #ffffff;
-  --success: var(--aprovo-verde);
-  --success-foreground: var(--aprovo-verde-ink);
-  --border: var(--aprovo-borda);
-  --input: var(--aprovo-borda);
-  --ring: var(--aprovo-roxo-apoio);
-  --radius: 1rem;
+  --success: var(--ap-success);
+  --success-foreground: var(--ap-ink);
+  --border: var(--ap-outline);
+  --input: var(--ap-outline-strong);
+  --ring: var(--ap-ring);
+
+  /* Nomes v1 ainda usados nas telas: viram aliases sensíveis ao tema */
+  --aprovo-roxo: var(--ap-brand-ink);
+  --aprovo-lavanda: var(--ap-brand-soft);
+  --aprovo-ink-2: var(--ap-text-muted);
+  --aprovo-offwhite: var(--ap-bg);
+  --aprovo-borda: var(--ap-outline);
+  --aprovo-erro: var(--ap-danger);
+  --aprovo-surface: var(--ap-surface);
 }
 
 @theme inline {
+  /* shadcn */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -64,36 +221,305 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  /* v2 */
+  --color-bg: var(--ap-bg);
+  --color-surface: var(--ap-surface);
+  --color-surface-2: var(--ap-surface-2);
+  --color-glass: var(--ap-glass);
+  --color-brand: var(--ap-brand);
+  --color-brand-ink: var(--ap-brand-ink);
+  --color-brand-soft: var(--ap-brand-soft);
+  --color-brand-2: var(--ap-brand-2);
+  --color-on-brand: var(--ap-on-brand);
+  --color-success-ink: var(--ap-success-ink);
+  --color-warning: var(--ap-warning);
+  --color-warning-ink: var(--ap-warning-ink);
+  --color-danger: var(--ap-danger);
+  --color-danger-ink: var(--ap-danger-ink);
+  --color-outline: var(--ap-outline);
+  --color-outline-strong: var(--ap-outline-strong);
+  --color-scrim: var(--ap-scrim);
+  --color-glow: var(--ap-glow);
+  --color-status-draft: var(--ap-status-draft);
+  --color-status-pending: var(--ap-status-pending);
+  --color-status-approved: var(--ap-status-approved);
+  --color-status-changes: var(--ap-status-changes);
+  --color-status-scheduled: var(--ap-status-scheduled);
+  --color-status-published: var(--ap-status-published);
+  --color-status-failed: var(--ap-status-failed);
+
+  /* v1 (telas antigas). roxo/lavanda/ink-2 seguem o tema; verde e ink ficam fixos
+     porque sempre aparecem como "texto escuro sobre verde". */
   --color-roxo: var(--aprovo-roxo);
   --color-roxo-apoio: var(--aprovo-roxo-apoio);
   --color-verde: var(--aprovo-verde);
   --color-lavanda: var(--aprovo-lavanda);
   --color-ink: var(--aprovo-ink);
   --color-ink-2: var(--aprovo-ink-2);
-  --font-sans: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Tipografia */
+  --font-sans:
+    var(--font-ui), "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-display-face), var(--font-ui), "Poppins", ui-sans-serif, sans-serif;
   --font-instagram:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --radius-sm: calc(var(--radius) - 8px);
-  --radius-md: calc(var(--radius) - 4px);
+
+  --text-display: clamp(2.25rem, 1.6rem + 3.2vw, 3.5rem);
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.03em;
+  --text-display--font-weight: 800;
+  --text-h1: clamp(1.75rem, 1.4rem + 1.6vw, 2.25rem);
+  --text-h1--line-height: 1.1;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h1--font-weight: 700;
+  --text-h2: clamp(1.25rem, 1.1rem + 0.8vw, 1.5rem);
+  --text-h2--line-height: 1.2;
+  --text-h2--letter-spacing: -0.01em;
+  --text-h2--font-weight: 600;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.35;
+  --text-title--font-weight: 700;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.35;
+  --text-caption--font-weight: 600;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.2;
+  --text-micro--letter-spacing: 0.08em;
+  --text-micro--font-weight: 700;
+
+  /* Raios: chunky. rounded-2xl/3xl também engordam para as telas v1 */
+  --radius-sm: calc(var(--radius) - 10px);
+  --radius-md: calc(var(--radius) - 6px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 8px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+  --radius-4xl: 2.5rem;
+
+  /* Sombras e brilho */
+  --shadow-card: var(--ap-shadow-card);
+  --shadow-sheet: var(--ap-shadow-sheet);
+  --shadow-glow: 0 0 0 1px rgb(155 60 255 / 0.35), 0 8px 32px -6px var(--ap-glow);
+  --shadow-glow-success: 0 0 0 1px rgb(34 230 136 / 0.4), 0 8px 32px -6px var(--ap-glow-success);
+  --shadow-glow-danger: 0 8px 28px -8px var(--ap-glow-danger);
+
+  /* Curvas */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
+
+  /* Animações */
+  --animate-fade-in: ap-fade-in var(--ap-dur-base) var(--ease-out-expo) both;
+  --animate-fade-out: ap-fade-out var(--ap-dur-fast) ease-in both;
+  --animate-sheet-in: ap-sheet-in var(--ap-dur-sheet) var(--ease-spring) both;
+  --animate-sheet-out: ap-sheet-out var(--ap-dur-base) var(--ease-in-out-quint) both;
+  --animate-pop-in: ap-pop-in var(--ap-dur-base) var(--ease-spring) both;
+  --animate-pop-out: ap-pop-out var(--ap-dur-fast) ease-in both;
+  --animate-rise: ap-rise var(--ap-dur-slow) var(--ease-out-expo) both;
+  --animate-pulse-dot: ap-pulse-dot 1.6s ease-out infinite;
+  --animate-glow-pulse: ap-glow-pulse 2.4s ease-in-out infinite;
+  --animate-shimmer: ap-shimmer 1.4s linear infinite;
+  --animate-success-pop: ap-success-pop 520ms var(--ease-spring) both;
+  --animate-burst: ap-burst 720ms var(--ease-out-expo) both;
+
+  @keyframes ap-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes ap-fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes ap-sheet-in {
+    from {
+      transform: translate3d(0, 100%, 0);
+    }
+    to {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  @keyframes ap-sheet-out {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(0, 100%, 0);
+    }
+  }
+  @keyframes ap-pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes ap-pop-out {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  @keyframes ap-rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes ap-pulse-dot {
+    0% {
+      box-shadow: 0 0 0 0 currentColor;
+    }
+    70%,
+    100% {
+      box-shadow: 0 0 0 6px transparent;
+    }
+  }
+  @keyframes ap-glow-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.9;
+      transform: scale(1.04);
+    }
+  }
+  @keyframes ap-shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @keyframes ap-success-pop {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.12);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes ap-burst {
+    0% {
+      opacity: 1;
+      transform: rotate(var(--ap-burst-angle, 0deg)) translateY(0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(var(--ap-burst-angle, 0deg))
+        translateY(calc(var(--ap-burst-distance, 56px) * -1)) scale(0.4);
+    }
+  }
+}
+
+/* ---------- Utilitários da v2 ---------- */
+@utility glass {
+  background-color: var(--ap-glass);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+}
+
+@utility bg-gradient-brand {
+  background-image: var(--ap-gradient-brand);
+}
+
+@utility bg-gradient-success {
+  background-image: var(--ap-gradient-success);
+}
+
+@utility bg-aurora {
+  background-image: var(--ap-gradient-aurora);
+}
+
+@utility text-gradient-brand {
+  background-image: linear-gradient(120deg, var(--ap-brand-ink) 0%, #c78bff 60%, #22e688 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility press {
+  transition: transform var(--ap-dur-fast) var(--ease-spring);
+  &:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: scale(0.96);
+  }
+}
+
+@utility skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--ap-surface-2) 0%,
+    color-mix(in oklab, var(--ap-surface-2), var(--ap-text) 8%) 50%,
+    var(--ap-surface-2) 100%
+  );
+  background-size: 200% 100%;
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-}
-
-@layer base {
+  ::selection {
+    background: var(--ap-brand);
+    color: var(--ap-on-brand);
+  }
+  :focus-visible {
+    outline-color: var(--ap-ring);
+  }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+}
+
+/* Movimento reduzido: sem deslocamento, sem loop; estados continuam visíveis. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
