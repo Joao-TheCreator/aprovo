@@ -1,3 +1,4 @@
+import { Inbox } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/app/EmptyState";
@@ -17,8 +18,10 @@ export function ApprovalList({
   if (requests.length === 0) {
     return (
       <EmptyState
-        title="Nenhum envio ainda"
-        description="Quando você enviar publicações para o cliente aprovar, elas aparecem aqui."
+        icon={Inbox}
+        eyebrow="Aprovações"
+        title="Ninguém te devendo resposta."
+        description="Quando você enviar um link, ele aparece aqui."
       >
         <Button asChild>
           <Link href={feedHref}>Ir para o feed</Link>
@@ -27,9 +30,13 @@ export function ApprovalList({
     );
   }
   return (
-    <ul className="flex flex-col gap-3">
-      {requests.map((r) => (
-        <li key={r.id}>
+    <ul className="flex flex-col gap-4">
+      {requests.map((r, i) => (
+        <li
+          key={r.id}
+          className="animate-rise"
+          style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}
+        >
           <ApprovalRequestCard request={r} showProfile={showProfile} />
         </li>
       ))}

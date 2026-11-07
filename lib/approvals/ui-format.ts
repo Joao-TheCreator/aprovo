@@ -113,3 +113,17 @@ export function lastRoundNote(rounds: RoundLike[], postId: string): string | nul
   }
   return null;
 }
+
+/** "06/11 às 14:32" (São Paulo time), the stamp used on decision pills. */
+export function formatDecisionStamp(d: Date | string): string {
+  return `${formatDayMonth(d)} às ${formatTimeBr(d)}`;
+}
+
+/** Up to two initials for avatar fallbacks: "Carlos Lima" → "CL", "" → "?". */
+export function initials(name: string | null | undefined): string {
+  const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  const first = words[0][0] ?? "";
+  const last = words.length > 1 ? (words[words.length - 1][0] ?? "") : "";
+  return `${first}${last}`.toUpperCase();
+}

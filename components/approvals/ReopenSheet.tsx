@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Check, Loader2, RotateCcw } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import {
@@ -94,22 +94,21 @@ export function ReopenSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="mx-auto max-h-[90dvh] w-full overflow-y-auto md:max-w-[430px]"
-      >
+      <SheetContent side="bottom" className="mx-auto w-full md:max-w-[430px]">
         <SheetHeader>
+          <p className="text-micro text-brand-ink uppercase">Nova rodada</p>
           <SheetTitle>Reabrir envio</SheetTitle>
           <SheetDescription>
             Escolha as publicações para uma nova rodada. Cada pessoa recebe um link novo e o link
             anterior dela deixa de valer.
           </SheetDescription>
         </SheetHeader>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-semibold">Publicações</legend>
+            <legend className="text-title mb-2">Publicações</legend>
             {request.items.map((it) => {
               const isLocked = locked(it.status);
+              const checked = selected.has(it.postId) && !isLocked;
               const note = lastRoundNote(request.rounds, it.postId);
               const id = `reopen-${request.id}-${it.postId}`;
               return (
@@ -117,19 +116,31 @@ export function ReopenSheet({
                   key={it.postId}
                   htmlFor={id}
                   className={cn(
-                    "bg-card border-border flex min-h-11 items-center gap-3 rounded-2xl border p-3",
-                    isLocked && "opacity-60",
+                    "press has-[:focus-visible]:ring-ring flex min-h-16 items-center gap-3 rounded-3xl border p-3 transition-[border-color,background-color] duration-(--ap-dur-fast) has-[:focus-visible]:ring-2",
+                    checked ? "border-brand-ink bg-brand-soft/60" : "border-border bg-card",
+                    isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                   )}
                 >
                   <input
                     id={id}
                     type="checkbox"
-                    className="size-5 shrink-0"
+                    className="sr-only"
                     disabled={isLocked}
-                    checked={selected.has(it.postId) && !isLocked}
+                    checked={checked}
                     onChange={() => toggle(it.postId)}
                   />
-                  <span className="size-12 shrink-0 overflow-hidden rounded-lg bg-neutral-200">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "flex size-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-(--ap-dur-fast)",
+                      checked
+                        ? "bg-gradient-brand text-on-brand animate-pop-in border-transparent"
+                        : "border-outline-strong",
+                    )}
+                  >
+                    {checked ? <Check className="size-4" strokeWidth={3} /> : null}
+                  </span>
+                  <span className="bg-surface-2 size-12 shrink-0 overflow-hidden rounded-sm">
                     {it.thumbUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -140,18 +151,21 @@ export function ReopenSheet({
                       />
                     ) : null}
                   </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-                    <span className="truncate">{shortCaption(it.caption, 60)}</span>
-                    <span>
-                      <StatusPill status={it.status} />
+                  <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                    <span className="text-body w-full truncate">
+                      {shortCaption(it.caption, 60)}
                     </span>
+                    <StatusPill status={it.status} />
                     {note ? (
-                      <span className="text-muted-foreground text-xs" suppressHydrationWarning>
+                      <span
+                        className="text-caption text-muted-foreground font-normal"
+                        suppressHydrationWarning
+                      >
                         {note}
                       </span>
                     ) : null}
                     {isLocked ? (
-                      <span className="text-muted-foreground text-xs">
+                      <span className="text-caption text-muted-foreground font-normal">
                         Agendadas ou publicadas não podem ser reabertas.
                       </span>
                     ) : null}
@@ -168,12 +182,15 @@ export function ReopenSheet({
           />
 
           {error ? (
-            <p role="alert" className="text-destructive text-sm font-semibold">
+            <p
+              role="alert"
+              className="text-danger-ink bg-surface-2 text-body rounded-2xl px-4 py-3 font-semibold"
+            >
               {error}
             </p>
           ) : null}
-          <Button disabled={pending || !ready} onClick={submit}>
-            {pending ? <Loader2 aria-hidden className="animate-spin" /> : null}
+          <Button size="lg" disabled={pending || !ready} onClick={submit}>
+            {pending ? <Loader2 aria-hidden className="animate-spin" /> : <RotateCcw aria-hidden />}
             Reabrir e gerar links
           </Button>
         </div>

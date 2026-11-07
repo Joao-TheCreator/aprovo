@@ -1,15 +1,17 @@
 "use client";
 
-import { ChevronDown, Link2, Loader2 } from "lucide-react";
+import { ChevronDown, Eye, Loader2, Plus, RotateCcw, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
+import { DotPill, InitialsAvatar, ProgressMeter, type DotTone } from "@/components/approvals/bits";
 import { ReopenSheet } from "@/components/approvals/ReopenSheet";
 import { ShareLinkSheet } from "@/components/approvals/ShareLinkSheet";
 import { StatusPill } from "@/components/feed/StatusPill";
 import { Button } from "@/components/ui/button";
+import { cardVariants } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -42,65 +44,77 @@ import {
 } from "@/lib/approvals/ui-format";
 import { cn } from "@/lib/utils";
 
-const REQUEST_STATUS: Record<ApprovalRequestSummary["status"], { label: string; cls: string }> = {
-  open: { label: "Aberto", cls: "bg-roxo-apoio text-white" },
-  partially_decided: { label: "Parcial", cls: "bg-lavanda text-roxo" },
-  decided: { label: "Decidido", cls: "bg-verde text-ink" },
-  revoked: { label: "Cancelado", cls: "border border-border bg-white text-ink-2" },
+const REQUEST_STATUS: Record<
+  ApprovalRequestSummary["status"],
+  { label: string; tone: DotTone; live?: boolean }
+> = {
+  open: { label: "Aberto", tone: "pending", live: true },
+  partially_decided: { label: "Parcial", tone: "changes" },
+  decided: { label: "Decidido", tone: "approved" },
+  revoked: { label: "Cancelado", tone: "draft" },
 };
 
-function countsText(c: ApprovalRequestSummary["counts"]): string {
-  const parts = [plural(c.items, "item", "itens")];
-  if (c.approved) parts.push(plural(c.approved, "aprovada", "aprovadas"));
-  if (c.changes) parts.push(plural(c.changes, "ajuste", "ajustes"));
-  if (c.pending) parts.push(plural(c.pending, "aguardando", "aguardando"));
-  return parts.join(" · ");
-}
-
-function linkState(l: ApprovalLinkSummary): { label: string; active: boolean } {
-  if (l.revokedAt) return { label: "Cancelado", active: false };
+function linkState(l: ApprovalLinkSummary): {
+  label: string;
+  tone: DotTone;
+  active: boolean;
+} {
+  if (l.revokedAt) return { label: "Cancelado", tone: "failed", active: false };
   if (l.usedAt) {
-    return {
-      label:
-        l.usedReason === "superseded"
-          ? "Substituído por link novo"
-          : `Usado em ${formatDateTimeBr(l.usedAt)}`,
-      active: false,
-    };
+    return l.usedReason === "superseded"
+      ? { label: "Substituído", tone: "draft", active: false }
+      : { label: `Usado em ${formatDateTimeBr(l.usedAt)}`, tone: "approved", active: false };
   }
-  if (new Date(l.expiresAt).getTime() < Date.now()) return { label: "Expirado", active: false };
+  if (new Date(l.expiresAt).getTime() < Date.now()) {
+    return { label: "Expirado", tone: "changes", active: false };
+  }
   const until = `válido até ${formatDateBr(l.expiresAt)}`;
-  return {
-    label: l.mode === "shared" ? `Link aberto · ${until}` : `Ativo · ${until}`,
-    active: true,
-  };
+  return l.mode === "shared"
+    ? { label: `Link aberto · ${until}`, tone: "scheduled", active: true }
+    : { label: `Ativo · ${until}`, tone: "pending", active: true };
 }
 
 function OpensList({ opens }: { opens: ApprovalLinkSummary["opens"] }) {
   const [shown, setShown] = useState(false);
   if (opens.length === 0) return null;
   return (
-    <div className="mt-1">
+    <div>
       <button
         type="button"
         aria-expanded={shown}
         onClick={() => setShown((v) => !v)}
-        className="text-roxo focus-visible:ring-ring/50 min-h-8 rounded text-xs font-semibold outline-none focus-visible:ring-[3px]"
+        className="text-brand-ink focus-visible:ring-ring -ml-1 flex min-h-11 items-center gap-1 rounded-full px-1 text-sm font-bold outline-none focus-visible:ring-2"
       >
-        {shown ? "Ocultar aberturas" : "Ver aberturas"}
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "ease-spring size-4 transition-transform duration-(--ap-dur-fast)",
+            shown && "rotate-180",
+          )}
+        />
+        {shown ? "Ocultar aberturas" : `Ver aberturas (${opens.length})`}
       </button>
       {shown ? (
-        <ul
-          className="text-muted-foreground mt-1 flex flex-col gap-0.5 text-xs"
+        <ol
+          className="animate-rise before:bg-outline relative mt-1 flex flex-col gap-2 pl-5 before:absolute before:top-1.5 before:bottom-1.5 before:left-[5px] before:w-0.5 before:content-['']"
           suppressHydrationWarning
         >
           {opens.map((o, i) => (
-            <li key={i}>
-              {formatDayMonthTime(o.openedAt)} · {o.ip ?? "IP não informado"} ·{" "}
-              {shortUserAgent(o.userAgent)}
+            <li key={i} className="text-caption text-muted-foreground relative font-normal">
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute top-1 -left-5 size-3 rounded-full border-2",
+                  i === 0 ? "bg-brand-ink border-brand-ink" : "bg-surface border-outline-strong",
+                )}
+              />
+              <span className="text-foreground font-semibold">
+                {formatDayMonthTime(o.openedAt)}
+              </span>{" "}
+              · {o.ip ?? "IP não informado"} · {shortUserAgent(o.userAgent)}
             </li>
           ))}
-        </ul>
+        </ol>
       ) : null}
     </div>
   );
@@ -114,6 +128,17 @@ function decisionsText(l: ApprovalLinkSummary, total: number): string | null {
   if (approved) parts.push(plural(approved, "aprovada", "aprovadas"));
   if (changes) parts.push(plural(changes, "com ajustes", "com ajustes"));
   return parts.join(" · ");
+}
+
+function Thumb({ src, className }: { src: string | null; className?: string }) {
+  return (
+    <span className={cn("bg-surface-2 block shrink-0 overflow-hidden rounded-sm", className)}>
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" loading="lazy" className="size-full object-cover" />
+      ) : null}
+    </span>
+  );
 }
 
 export function ApprovalRequestCard({
@@ -142,7 +167,18 @@ export function ApprovalRequestCard({
   const canReopen =
     request.status !== "revoked" && request.rounds.some((r) => r.decisions.length > 0);
   const roundLines = roundSummaries(request.rounds);
+  const showRounds =
+    roundLines.length > 1 || (roundLines.length === 1 && request.rounds[0].decisions.length > 0);
   const detailsId = `req-${request.id}-details`;
+  const { counts } = request;
+  const decided = counts.approved + counts.changes;
+  const people = [
+    ...new Map(
+      request.links
+        .filter((l) => !l.revokedAt && (l.recipientName || l.label))
+        .map((l) => [(l.recipientName || l.label || "").trim().toLowerCase(), l]),
+    ).values(),
+  ];
 
   function run(
     action: () => Promise<{ ok: true } | { ok: false; code: string; message: string }>,
@@ -176,134 +212,195 @@ export function ApprovalRequestCard({
   }
 
   return (
-    <article className="bg-card border-border flex flex-col gap-3 rounded-2xl border p-4">
-      <div className="flex items-start justify-between gap-2">
+    <article className={cn(cardVariants(), "gap-4")}>
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-base leading-6 font-semibold">
+          <h2 className="text-title truncate">
             <Link
               href={`/perfis/${request.profile.id}/aprovacoes/${request.id}`}
-              className="focus-visible:ring-ring/50 rounded outline-none hover:underline focus-visible:ring-[3px]"
+              className="focus-visible:ring-ring rounded-md outline-none hover:underline focus-visible:ring-2"
             >
               {title}
             </Link>
           </h2>
-          {showProfile ? (
-            <p className="text-muted-foreground text-sm">@{request.profile.igUsername}</p>
-          ) : null}
+          <p className="text-caption text-muted-foreground font-normal" suppressHydrationWarning>
+            {showProfile ? `@${request.profile.igUsername} · ` : ""}criado em{" "}
+            {formatDateBr(request.createdAt)}
+          </p>
         </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-full px-2.5 py-1 text-xs leading-4 font-semibold",
-            status.cls,
-          )}
-        >
+        <DotPill tone={status.tone} live={status.live} className="shrink-0">
           {status.label}
-        </span>
+        </DotPill>
       </div>
 
-      <p className="text-sm">{countsText(request.counts)}</p>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-caption mr-1">{plural(counts.items, "item", "itens")}</span>
+          {counts.approved ? (
+            <DotPill tone="approved">{plural(counts.approved, "aprovada", "aprovadas")}</DotPill>
+          ) : null}
+          {counts.changes ? (
+            <DotPill tone="changes">{plural(counts.changes, "ajuste", "ajustes")}</DotPill>
+          ) : null}
+          {counts.pending ? (
+            <DotPill tone="pending" live>
+              {counts.pending} aguardando
+            </DotPill>
+          ) : null}
+        </div>
+        <ProgressMeter value={decided} max={counts.items} label="Publicações decididas" />
+      </div>
 
-      <ul className="flex gap-1.5 overflow-x-auto" aria-label="Publicações do envio">
+      <ul className="flex gap-1.5 overflow-x-auto pb-1" aria-label="Publicações do envio">
         {request.items.map((it) => (
-          <li
-            key={it.postId}
-            className="size-14 shrink-0 overflow-hidden rounded-lg bg-neutral-200"
-          >
-            {it.thumbUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={it.thumbUrl} alt="" loading="lazy" className="size-full object-cover" />
-            ) : null}
+          <li key={it.postId}>
+            <Thumb src={it.thumbUrl} className="size-14" />
           </li>
         ))}
       </ul>
 
-      <p className="text-muted-foreground text-xs" suppressHydrationWarning>
-        Criado em {formatDateBr(request.createdAt)}
-      </p>
+      {people.length > 0 ? (
+        <div className="flex items-center gap-2">
+          <div className="flex -space-x-2">
+            {people.slice(0, 4).map((l) =>
+              l.mode === "shared" ? (
+                <span
+                  key={l.id}
+                  aria-hidden
+                  className="bg-brand-soft text-brand-ink ring-card flex size-8 items-center justify-center rounded-full ring-2"
+                >
+                  <Users className="size-4" />
+                </span>
+              ) : (
+                <InitialsAvatar
+                  key={l.id}
+                  name={l.recipientName}
+                  className="ring-card size-8 text-[0.625rem] ring-2"
+                />
+              ),
+            )}
+          </div>
+          <p className="text-caption text-muted-foreground min-w-0 truncate font-normal">
+            {people.map((l) => l.recipientName || l.label).join(", ")}
+          </p>
+        </div>
+      ) : null}
 
-      {roundLines.length > 1 ||
-      (roundLines.length === 1 && request.rounds[0].decisions.length > 0) ? (
+      {showRounds ? (
         <ol
           aria-label="Rodadas"
-          className="text-muted-foreground flex flex-col gap-0.5 text-xs"
+          className="before:bg-outline relative flex flex-col gap-2 pl-5 before:absolute before:top-1.5 before:bottom-1.5 before:left-[5px] before:w-0.5 before:content-['']"
           suppressHydrationWarning
         >
-          {roundLines.map((line) => (
-            <li key={line}>{line}</li>
+          {roundLines.map((line, i) => (
+            <li key={line} className="text-caption text-muted-foreground relative font-normal">
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute top-1 -left-5 size-3 rounded-full border-2",
+                  i === roundLines.length - 1
+                    ? "bg-gradient-brand border-transparent"
+                    : "bg-surface border-outline-strong",
+                )}
+              />
+              {line}
+            </li>
           ))}
         </ol>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={detailsId}
-          onClick={() => setExpanded((v) => !v)}
-          className="text-roxo focus-visible:ring-ring/50 flex min-h-11 items-center gap-1 self-start rounded-full text-sm font-semibold outline-none focus-visible:ring-[3px]"
-        >
-          <ChevronDown
-            aria-hidden
-            className={cn("size-4 transition-transform", expanded && "rotate-180")}
-          />
-          Links e decisões
-        </button>
         {canReopen ? (
-          <Button variant="secondary" className="min-h-11" onClick={() => setReopenOpen(true)}>
+          <Button onClick={() => setReopenOpen(true)}>
+            <RotateCcw aria-hidden />
             Reabrir
           </Button>
         ) : null}
+        <Button
+          variant="ghost"
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          onClick={() => setExpanded((v) => !v)}
+          className="px-4"
+        >
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "ease-spring transition-transform duration-(--ap-dur-fast)",
+              expanded && "rotate-180",
+            )}
+          />
+          Links e decisões
+        </Button>
       </div>
 
       {expanded ? (
-        <div id={detailsId} className="flex flex-col gap-4">
-          <section aria-label="Links" className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold">Links</h3>
+        <div id={detailsId} className="animate-rise flex flex-col gap-5">
+          <section aria-label="Links" className="flex flex-col gap-3">
+            <h3 className="text-micro text-muted-foreground uppercase">Links</h3>
             {request.links.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Nenhum link gerado.</p>
+              <p className="text-body text-muted-foreground">Nenhum link gerado.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {request.links.map((l) => {
                   const st = linkState(l);
+                  const name = l.recipientName || l.label || "Link sem nome";
+                  const decidedLine = decisionsText(l, counts.items);
                   return (
                     <li
                       key={l.id}
-                      className="bg-background flex items-center justify-between gap-2 rounded-xl p-3"
+                      className={cn(
+                        "bg-surface-2/60 flex flex-col gap-2 rounded-3xl p-3",
+                        !st.active && "opacity-90",
+                      )}
                     >
-                      <div className="min-w-0 text-sm">
-                        <p className="flex items-center gap-1.5 font-semibold">
-                          <Link2 aria-hidden className="size-4 shrink-0" />
-                          <span className="truncate">
-                            {l.recipientName || l.label || "Link sem nome"}
+                      <div className="flex items-start gap-3">
+                        {l.mode === "shared" ? (
+                          <span
+                            aria-hidden
+                            className="bg-brand-soft text-brand-ink flex size-9 shrink-0 items-center justify-center rounded-full"
+                          >
+                            <Users className="size-4" />
                           </span>
-                        </p>
-                        {l.recipientContact ? (
-                          <p className="text-muted-foreground text-xs">{l.recipientContact}</p>
+                        ) : (
+                          <InitialsAvatar name={l.recipientName} ring={st.active} />
+                        )}
+                        <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                          <p className="text-body w-full truncate font-semibold">{name}</p>
+                          {l.recipientContact ? (
+                            <p className="text-caption text-muted-foreground font-normal">
+                              {l.recipientContact}
+                            </p>
+                          ) : null}
+                          <DotPill
+                            tone={st.tone}
+                            live={st.active && l.mode === "personal"}
+                            className="bg-surface"
+                          >
+                            <span suppressHydrationWarning>{st.label}</span>
+                          </DotPill>
+                        </div>
+                        {st.active ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => setRevoking(l)}
+                          >
+                            Revogar
+                          </Button>
                         ) : null}
-                        <p className="text-muted-foreground text-xs" suppressHydrationWarning>
-                          abriu {l.openedCount}×
-                          {l.lastOpenedAt ? ` · última ${formatDayMonthTime(l.lastOpenedAt)}` : ""}
-                        </p>
-                        <OpensList opens={l.opens} />
-                        {decisionsText(l, request.counts.items) ? (
-                          <p className="text-xs font-semibold">
-                            {decisionsText(l, request.counts.items)}
-                          </p>
-                        ) : null}
-                        <p className="text-muted-foreground text-xs" suppressHydrationWarning>
-                          {st.label}
-                        </p>
                       </div>
-                      {st.active ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="min-h-11"
-                          onClick={() => setRevoking(l)}
-                        >
-                          Revogar
-                        </Button>
-                      ) : null}
+                      <p
+                        className="text-caption text-muted-foreground flex items-center gap-1.5 font-normal"
+                        suppressHydrationWarning
+                      >
+                        <Eye aria-hidden className="size-3.5" />
+                        abriu {l.openedCount}×
+                        {l.lastOpenedAt ? ` · última ${formatDayMonthTime(l.lastOpenedAt)}` : ""}
+                      </p>
+                      {decidedLine ? <p className="text-caption">{decidedLine}</p> : null}
+                      <OpensList opens={l.opens} />
                     </li>
                   );
                 })}
@@ -315,48 +412,46 @@ export function ApprovalRequestCard({
                 className="self-start"
                 onClick={() => setNewLinkOpen(true)}
               >
+                <Plus aria-hidden />
                 Novo link
               </Button>
             ) : null}
           </section>
 
-          <section aria-label="Decisões" className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold">Decisões</h3>
+          <section aria-label="Decisões" className="flex flex-col gap-3">
+            <h3 className="text-micro text-muted-foreground uppercase">Decisões</h3>
             <ul className="flex flex-col gap-2">
               {request.items.map((it) => (
-                <li key={it.postId} className="bg-background flex gap-3 rounded-xl p-3">
-                  <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-neutral-200">
-                    {it.thumbUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={it.thumbUrl}
-                        alt=""
-                        loading="lazy"
-                        className="size-full object-cover"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-                    <p className="truncate">{shortCaption(it.caption, 60)}</p>
+                <li key={it.postId} className="bg-surface-2/60 flex gap-3 rounded-3xl p-3">
+                  <Thumb src={it.thumbUrl} className="size-12" />
+                  <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+                    <p className="text-body w-full truncate">{shortCaption(it.caption, 60)}</p>
                     {it.decision ? (
                       <>
-                        <p className="text-muted-foreground text-xs" suppressHydrationWarning>
-                          <strong className="text-foreground">
+                        <p
+                          className="text-caption text-muted-foreground font-normal"
+                          suppressHydrationWarning
+                        >
+                          <strong
+                            className={
+                              it.decision.decision === "approved"
+                                ? "text-success-ink"
+                                : "text-warning-ink"
+                            }
+                          >
                             {it.decision.decision === "approved" ? "Aprovou" : "Pediu ajustes"}
                           </strong>{" "}
                           · {it.decidedViaLink || it.decision.approverName || "Cliente"} ·{" "}
                           {formatDateTimeBr(it.decision.decidedAt)}
                         </p>
                         {it.decision.comment ? (
-                          <p className="bg-lavanda rounded-lg p-2 whitespace-pre-line">
+                          <p className="bg-brand-soft text-body w-full rounded-2xl rounded-tl-md px-3 py-2 whitespace-pre-line">
                             {it.decision.comment}
                           </p>
                         ) : null}
                       </>
                     ) : (
-                      <div>
-                        <StatusPill status={it.status} />
-                      </div>
+                      <StatusPill status={it.status} className="bg-surface" />
                     )}
                   </div>
                 </li>
@@ -365,7 +460,11 @@ export function ApprovalRequestCard({
           </section>
 
           {!closed ? (
-            <Button variant="outline" className="self-start" onClick={() => setCancelling(true)}>
+            <Button
+              variant="ghost"
+              className="text-danger-ink self-start px-4"
+              onClick={() => setCancelling(true)}
+            >
               Cancelar envio
             </Button>
           ) : null}
@@ -382,7 +481,7 @@ export function ApprovalRequestCard({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRevoking(null)}>
+            <Button variant="ghost" onClick={() => setRevoking(null)}>
               Voltar
             </Button>
             <Button
@@ -412,7 +511,7 @@ export function ApprovalRequestCard({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelling(false)}>
+            <Button variant="ghost" onClick={() => setCancelling(false)}>
               Voltar
             </Button>
             <Button
@@ -455,7 +554,7 @@ export function ApprovalRequestCard({
             onChange={(e) => setNewContact(e.target.value)}
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewLinkOpen(false)}>
+            <Button variant="ghost" onClick={() => setNewLinkOpen(false)}>
               Voltar
             </Button>
             <Button disabled={pending || !newName.trim()} onClick={newLink}>
