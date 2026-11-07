@@ -95,9 +95,9 @@ feito junto com o Claude Cowork.
 3. Em Instagram › **API setup with Instagram login** **[≈]**:
    - Copiar **Instagram App ID** e **Instagram App Secret** (são diferentes do App ID geral da
      Meta). Eles viram `META_APP_ID` e `META_APP_SECRET`.
-   - Em **Business login settings** **[≈]**, adicionar as **OAuth Redirect URIs**:
-     `https://<projeto>.vercel.app/api/instagram/callback` e
-     `http://localhost:3000/api/instagram/callback`.
+   - Em **Business login settings** **[≈]**, adicionar a **OAuth Redirect URI**
+     `https://<projeto>.vercel.app/api/instagram/callback`. A Meta só aceita HTTPS aqui
+     (`http://localhost:3000/...` é recusado); para OAuth local use um túnel HTTPS.
    - Deauthorize callback e Data deletion request: `https://<projeto>.vercel.app/legal/exclusao-de-dados`.
 4. Em **App Roles › Roles** **[≈]** (ou dentro de Instagram › "Add Instagram testers"), adicionar
    o @ do Samuel como **Instagram Tester**. O Samuel aceita o convite no Instagram em

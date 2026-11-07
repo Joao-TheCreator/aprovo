@@ -1,6 +1,6 @@
 # 11 · Passagem de bastão (estado da infraestrutura em 06/11/2026)
 
-Registro do que o João fez pelo Claude Cowork. **Sem chaves secretas**: os segredos ficam no
+Registro do que o João fez pelo Claude Cowork e pelo Claude Code. **Sem chaves secretas**: os segredos ficam no
 gerenciador de senhas do João com nomes "APROVO – …". Conta usada nos serviços:
 jpedrobiel@gmail.com (Vercel via GitHub).
 
@@ -9,10 +9,11 @@ jpedrobiel@gmail.com (Vercel via GitHub).
 | Banco Neon | feito |
 | Cloudflare R2 (bucket, token, CORS) | feito |
 | Resend (API key) | feito |
-| Login com Google (OAuth) | feito; falta adicionar o Gmail do Samuel como testador |
-| Vercel (deploy + migrations) | feito, no ar |
-| App na Meta (Instagram) | **próximo passo** |
-| Conta do Samuel + validação | pendente |
+| Login com Google (OAuth) | feito; falta adicionar o e-mail do Samuel como testador |
+| Vercel (deploy + migrations) | feito, no ar; produção segue `main`; `CRON_SECRET` cadastrada |
+| GitHub | `main` é a branch padrão |
+| App na Meta (Instagram) | feito no app existente **ELIM MKT** (ver seção abaixo) |
+| Conta do Samuel + validação | convite de Instagram Tester enviado (pendente de aceite); checklist da seção 8 do doc 10 pendente |
 
 **Produção:** https://aprovo-six.vercel.app · login em `/entrar`.
 
@@ -28,33 +29,43 @@ jpedrobiel@gmail.com (Vercel via GitHub).
 - **Google OAuth:** projeto `aprovo-513922`, tela de consentimento externa em modo Testando;
   cliente "APROVO Web" com redirects `http://localhost:3000/api/auth/callback/google` e
   `https://aprovo-six.vercel.app/api/auth/callback/google`.
-- **Vercel:** time `jpedrobiel-6428` (Hobby), projeto `aprovo`, branch de produção
-  `claude/blissful-archimedes-cxl86r` (trocar para `main` após o merge). Build command:
-  `pnpm db:migrate && pnpm build` (migrations rodam a cada deploy).
+- **Vercel:** time `jpedrobiel-6428` (Hobby), projeto `aprovo`, branch de produção `main`
+  (Settings › Environments › Production › Branch Tracking). Build command:
+  `pnpm db:migrate && pnpm build` (migrations rodam a cada deploy). Cron semanal
+  `/api/instagram/refresh` (segunda 03:00 UTC, `vercel.json`); a rota é pública no `proxy.ts`
+  e se protege com `CRON_SECRET`.
+- **GitHub:** `Joao-TheCreator/aprovo`, branch padrão `main`.
 
 ## Variáveis cadastradas na Vercel
 
 `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`*, `APP_URL`*, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`,
 `RESEND_API_KEY`, `EMAIL_FROM`, `STORAGE_DRIVER=s3`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
 `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT`, `IG_FALLBACK_PROVIDER=none`,
-`META_REDIRECT_URI`*. (* só Production.)
+`META_REDIRECT_URI`*, `META_APP_ID`* (`26109955498700488`, Config), `META_APP_SECRET`*,
+`CRON_SECRET`*. (* só Production.) Nenhuma variável falta.
 
-**Faltam:** `META_APP_ID` e `META_APP_SECRET` (saem do app na Meta) e `CRON_SECRET`
-(qualquer string longa; protege a rota semanal `/api/instagram/refresh` que renova o token).
-Depois de adicionar, fazer Redeploy.
+## App na Meta (feito em 06/11/2026)
 
-## Próximo passo: app na Meta
+Usado o app existente **ELIM MKT** (App ID `1912316206111250`, modo de desenvolvimento, sem
+portfólio empresarial) em vez de criar um novo. Caso de uso "Gerenciar mensagens e conteúdo no
+Instagram" › aba **Configuração da API com login do Instagram**:
 
-Ver `docs/10-deploy-e-meta.md`, seção 6, usando as URLs:
+- **Instagram App ID** `26109955498700488` (= `META_APP_ID`); o secret está no gerenciador de
+  senhas como "APROVO – META_APP_SECRET".
+- **Configurações do login da empresa:** redirect `https://aprovo-six.vercel.app/api/instagram/callback`;
+  desautorização e exclusão de dados em `https://aprovo-six.vercel.app/legal/exclusao-de-dados`.
+  A Meta **recusou** `http://localhost:3000/...` (só aceita HTTPS); para testar OAuth local é
+  preciso um túnel HTTPS ou testar em produção.
+- **Configurações › Básico:** política de privacidade, termos e domínio `aprovo-six.vercel.app`
+  salvos. O campo "URL de instruções de exclusão de dados" dessa tela foi recusado pela Meta
+  ("deve ser uma URL válida") mesmo com a página respondendo 200; só importa para App Review.
+- A Meta marca essa configuração como obsoleta em favor do "login unificado", que exige
+  portfólio empresarial. Continua funcionando; migrar quando for preciso [confirmar prazo].
+- **Funções:** `samuelbozzuto` convidado como Testador do Instagram (pendente de aceite em
+  Instagram › Configurações › Site e apps › Convites de testador).
 
-- Redirect OAuth: `https://aprovo-six.vercel.app/api/instagram/callback` e
-  `http://localhost:3000/api/instagram/callback`
-- Deauthorize / Data deletion: `https://aprovo-six.vercel.app/legal/exclusao-de-dados`
-- Privacy: `https://aprovo-six.vercel.app/legal/politica-de-privacidade`
-- Terms: `https://aprovo-six.vercel.app/legal/termos-de-uso`
-
-Dados que faltam do Samuel: **@ do Instagram** (convite de testador na Meta) e **Gmail**
-(lista de testadores do Google OAuth).
+Falta: **e-mail Google do Samuel** (ou outra conta Google) na lista de testadores do OAuth
+(console.cloud.google.com › projeto `aprovo-513922` › Google Auth Platform › Público).
 
 ## Observações operacionais
 
