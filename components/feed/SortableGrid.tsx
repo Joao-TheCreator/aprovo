@@ -24,6 +24,7 @@ import { useRef, useState } from "react";
 import { GridCell } from "@/components/feed/GridCell";
 import { moveId, type MoveDirection } from "@/lib/posts/reorder";
 import type { FeedItem } from "@/lib/profiles/contracts";
+import { haptic } from "@/lib/ui/haptics";
 
 export type PlannedItem = Extract<FeedItem, { kind: "planned" }>;
 
@@ -132,6 +133,7 @@ export function SortableGrid({
     const next = [...ids];
     next.splice(from, 1);
     next.splice(to, 0, String(a.id));
+    haptic("tap");
     onReorder(next, ids);
   }
   function guardedOpen(item: FeedItem) {
@@ -141,7 +143,10 @@ export function SortableGrid({
   }
   function onMove(id: string, dir: MoveDirection) {
     const next = moveId(ids, id, dir);
-    if (next.some((v, i) => v !== ids[i])) onReorder(next, ids);
+    if (next.some((v, i) => v !== ids[i])) {
+      haptic("tap");
+      onReorder(next, ids);
+    }
   }
 
   return (

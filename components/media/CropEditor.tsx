@@ -187,7 +187,8 @@ function CropBody({
     });
   }
 
-  if (!src) return <p className="text-sm">Esta mídia ainda não tem prévia.</p>;
+  if (!src)
+    return <p className="text-body text-muted-foreground">Esta mídia ainda não tem prévia.</p>;
 
   return (
     <>
@@ -201,7 +202,7 @@ function CropBody({
         onPointerUp={() => (drag.current = null)}
         onPointerCancel={() => (drag.current = null)}
         onKeyDown={onKeyDown}
-        className="focus-visible:ring-ring/60 mx-auto w-full max-w-[320px] cursor-grab touch-none overflow-hidden rounded-xl outline-none select-none focus-visible:ring-[3px] active:cursor-grabbing"
+        className="focus-visible:ring-ring focus-visible:ring-offset-background border-outline shadow-card mx-auto w-full max-w-[320px] cursor-grab touch-none overflow-hidden rounded-3xl border outline-none select-none focus-visible:ring-2 focus-visible:ring-offset-2 active:cursor-grabbing"
       >
         {crop ? (
           <CroppedImage
@@ -224,8 +225,11 @@ function CropBody({
         )}
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="crop-zoom" className="text-sm font-semibold">
-          Zoom {view ? `${view.zoom.toFixed(1)}×` : ""}
+        <label htmlFor="crop-zoom" className="text-caption flex items-center justify-between">
+          Zoom
+          <span className="text-brand-ink tabular-nums">
+            {view ? `${view.zoom.toFixed(1)}×` : ""}
+          </span>
         </label>
         <Slider
           id="crop-zoom"

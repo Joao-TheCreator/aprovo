@@ -1,6 +1,6 @@
 "use client";
 
-import { ImagePlus, Loader2, UploadCloud } from "lucide-react";
+import { Clapperboard, ImagePlus, Loader2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { uploadFile, UploadError, validateFile } from "@/lib/media/client-upload
 import { CAROUSEL_MAX, UPLOAD_ERROR_MESSAGES } from "@/lib/media/contracts";
 import { createPost } from "@/lib/posts/actions";
 import type { PostKind } from "@/lib/posts/contracts";
+import { cn } from "@/lib/utils";
 
 type Item = {
   id: string;
@@ -196,7 +197,7 @@ export function NewPostFlow({ profileId, kind }: { profileId: string; kind: Post
         addFiles(e.dataTransfer.files);
       }}
     >
-      <h1 className="text-xl font-bold">{isVideo ? "Novo vídeo" : "Novo post"}</h1>
+      <h1 className="font-display text-h1">{isVideo ? "Novo vídeo" : "Novo post"}</h1>
 
       <input
         ref={inputRef}
@@ -212,15 +213,33 @@ export function NewPostFlow({ profileId, kind }: { profileId: string; kind: Post
 
       {items.length === 0 ? (
         <div
-          className={`border-border flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-8 text-center ${dragOver ? "bg-lavanda" : "bg-card"}`}
+          className={cn(
+            "relative isolate flex flex-col items-center gap-4 overflow-hidden rounded-4xl border-2 border-dashed p-8 text-center transition-colors duration-(--ap-dur-fast)",
+            dragOver ? "border-brand-ink bg-brand-soft" : "border-border bg-card",
+          )}
         >
-          <UploadCloud aria-hidden className="text-primary hidden size-10 md:block" />
-          <p className="hidden text-sm md:block">Arraste os arquivos aqui ou</p>
+          <span
+            aria-hidden
+            className="bg-glow pointer-events-none absolute -top-24 left-1/2 -z-10 size-56 -translate-x-1/2 rounded-full opacity-60 blur-3xl"
+          />
+          <span
+            aria-hidden
+            className="bg-gradient-brand text-on-brand shadow-glow flex size-16 items-center justify-center rounded-3xl"
+          >
+            {isVideo ? (
+              <Clapperboard className="size-8" strokeWidth={2} />
+            ) : (
+              <UploadCloud className="size-8" strokeWidth={2} />
+            )}
+          </span>
+          <p className="text-body text-muted-foreground hidden md:block">
+            Arraste os arquivos aqui ou
+          </p>
           <Button onClick={() => inputRef.current?.click()}>
             <ImagePlus aria-hidden />
             Escolher da galeria
           </Button>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-caption text-muted-foreground font-medium">
             {isVideo
               ? "MP4 ou MOV, até 300 MB e 90 s."
               : `JPG, PNG, WebP ou HEIC, até 30 MB. Até ${CAROUSEL_MAX} fotos.`}
@@ -229,7 +248,10 @@ export function NewPostFlow({ profileId, kind }: { profileId: string; kind: Post
       ) : (
         <section
           aria-label="Mídias selecionadas"
-          className={`rounded-2xl p-3 ${dragOver ? "bg-lavanda" : "bg-card"}`}
+          className={cn(
+            "border-border shadow-card rounded-3xl border p-4 transition-colors duration-(--ap-dur-fast)",
+            dragOver ? "bg-brand-soft" : "bg-card",
+          )}
         >
           <MediaStrip
             items={stripItems}
@@ -241,7 +263,7 @@ export function NewPostFlow({ profileId, kind }: { profileId: string; kind: Post
             onAdd={items.length < max ? () => inputRef.current?.click() : undefined}
             addLabel="Adicionar mais mídias"
           />
-          <p className="text-muted-foreground text-xs">
+          <p className="text-caption text-muted-foreground font-medium">
             {isVideo
               ? "Um vídeo por publicação."
               : `${items.length}/${CAROUSEL_MAX} · arraste para reordenar.`}
@@ -250,7 +272,7 @@ export function NewPostFlow({ profileId, kind }: { profileId: string; kind: Post
       )}
 
       {uploadingVideo?.durationSec ? (
-        <div className="bg-card rounded-2xl p-3">
+        <div className="bg-card border-border shadow-card rounded-3xl border p-4">
           <PosterPicker
             src={uploadingVideo.previewUrl}
             durationSec={uploadingVideo.durationSec}
@@ -260,18 +282,18 @@ export function NewPostFlow({ profileId, kind }: { profileId: string; kind: Post
               patch(uploadingVideo.id, { posterTime: t });
             }}
           />
-          <p className="text-muted-foreground mt-1 text-xs">
+          <p className="text-caption text-muted-foreground mt-1 font-medium">
             A capa é escolhida enquanto o vídeo é enviado.
           </p>
         </div>
       ) : null}
 
-      <div className="bg-background/95 sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 py-2 backdrop-blur md:bottom-0">
+      <div className="glass shadow-sheet sticky bottom-[calc(var(--app-nav-offset,5.25rem)+0.75rem)] z-10 flex gap-2 rounded-4xl border border-white/10 p-2 md:bottom-6">
         <Button variant="outline" className="flex-1" onClick={() => router.push(feedHref)}>
           Cancelar
         </Button>
         <Button className="flex-1" disabled={!canAdvance || pending} onClick={advance}>
-          {pending ? <Loader2 aria-hidden className="animate-spin" /> : null}
+          {pending ? <Loader2 aria-hidden className="motion-safe:animate-spin" /> : null}
           Avançar
         </Button>
       </div>

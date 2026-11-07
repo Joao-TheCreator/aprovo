@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, RefreshCw, Sparkles, Unplug, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -19,6 +20,7 @@ import type { FeedItem, GridRatio, ProfileFeed } from "@/lib/profiles/contracts"
 import { refreshProfile } from "@/lib/profiles/actions";
 import { bulkArchivePosts, bulkDeletePosts, reorderPosts } from "@/lib/posts/actions";
 import { applyOrder } from "@/lib/posts/reorder";
+import { cn } from "@/lib/utils";
 
 /** Message of the banner shown while the linked Instagram connection is not active (docs/12 section 7). */
 function connectionBannerText(status: string, username: string): string {
@@ -30,6 +32,42 @@ function connectionBannerText(status: string, username: string): string {
     default:
       return `O Instagram @${username} desconectou. Reconecte para continuar publicando.`;
   }
+}
+
+/** v2 banner around the feed (chrome, not part of the Instagram simulation). */
+function Banner({
+  tone,
+  icon: Icon,
+  role = "status",
+  children,
+}: {
+  tone: "warning" | "danger";
+  icon: LucideIcon;
+  role?: "status" | "alert";
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role={role}
+      className={cn(
+        "text-body animate-rise flex items-start gap-3 rounded-3xl border p-4",
+        tone === "warning"
+          ? "border-warning/40 bg-warning/10"
+          : "border-danger-ink/40 bg-danger/10",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-2xl",
+          tone === "warning" ? "bg-warning text-ink" : "bg-danger text-destructive-foreground",
+        )}
+      >
+        <Icon className="size-5" strokeWidth={2} />
+      </span>
+      <div className="min-w-0 flex-1 pt-2">{children}</div>
+    </div>
+  );
 }
 
 export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
@@ -186,46 +224,83 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
 
       {profile.importSource === "graph_api" && !profile.connectionId && !canRefresh ? (
         <PhoneFrame>
-          <p role="status" className="bg-lavanda rounded-2xl px-4 py-3 text-sm">
+          <Banner tone="warning" icon={Unplug}>
             Conta do Instagram desconectada. Reconecte em{" "}
-            <Link href="/configuracoes" className="font-semibold underline">
+            <Link
+              href="/configuracoes"
+              className="text-brand-ink font-bold underline-offset-4 hover:underline"
+            >
               Configurações
             </Link>
             .
-          </p>
+          </Banner>
         </PhoneFrame>
       ) : null}
 
       {profile.connectionStatus && profile.connectionStatus !== "active" ? (
         <PhoneFrame>
-          <p role="status" className="bg-lavanda rounded-2xl px-4 py-3 text-sm">
+          <Banner tone="warning" icon={Unplug}>
             {connectionBannerText(profile.connectionStatus, profile.igUsername)}{" "}
-            <Link href="/configuracoes" className="font-semibold underline">
+            <Link
+              href="/configuracoes"
+              className="text-brand-ink font-bold underline-offset-4 hover:underline"
+            >
               Abrir Configurações
             </Link>
-          </p>
+          </Banner>
         </PhoneFrame>
       ) : null}
 
       {profile.importStatus === "failed" ? (
         <PhoneFrame>
-          <div role="alert" className="bg-lavanda flex flex-col gap-3 rounded-2xl p-4">
-            <p className="text-[15px]">
-              {profile.importError ?? "Não conseguimos importar o feed."}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={retry} disabled={retrying}>
-                Tentar de novo
-              </Button>
-              <Button asChild variant="outline">
-                <Link href={`/perfis/${profile.id}/importar`}>Importar manualmente</Link>
-              </Button>
-            </div>
+          <Banner tone="danger" icon={AlertTriangle} role="alert">
+            <span className="flex flex-col gap-3">
+              <span>{profile.importError ?? "Não conseguimos importar o feed."}</span>
+              <span className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={retry} disabled={retrying}>
+                  <RefreshCw aria-hidden className={retrying ? "motion-safe:animate-spin" : ""} />
+                  Tentar de novo
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/perfis/${profile.id}/importar`}>Importar manualmente</Link>
+                </Button>
+              </span>
+            </span>
+          </Banner>
+        </PhoneFrame>
+      ) : null}
+
+      {!clientMode &&
+      counts.all === 0 &&
+      items.length > 0 &&
+      profile.importStatus !== "importing" ? (
+        <PhoneFrame>
+          <div className="bg-card border-border relative isolate flex items-center gap-4 overflow-hidden rounded-3xl border border-dashed p-4">
+            <span
+              aria-hidden
+              className="bg-glow pointer-events-none absolute -top-16 -left-10 -z-10 size-40 rounded-full opacity-50 blur-3xl"
+            />
+            <span
+              aria-hidden
+              className="bg-gradient-brand text-on-brand shadow-glow flex size-12 shrink-0 items-center justify-center rounded-2xl"
+            >
+              <Sparkles className="size-6" strokeWidth={2} />
+            </span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="font-display text-title">Grade em branco, ideia nova.</span>
+              <span className="text-muted-foreground text-caption font-medium">
+                Toque no + pra adicionar o primeiro post.
+              </span>
+            </span>
           </div>
         </PhoneFrame>
       ) : null}
 
-      <PhoneFrame className="font-instagram border-border overflow-hidden bg-white text-black md:rounded-2xl md:border">
+      {/* Instagram simulation: light theme island, system font, faithful to the app. */}
+      <PhoneFrame
+        data-theme="light"
+        className="font-instagram md:shadow-card overflow-hidden bg-white text-black md:rounded-[2rem] md:border md:border-neutral-200"
+      >
         <InstagramHeader profile={profile} />
         {profile.importStatus === "importing" ? (
           <div className="grid grid-cols-3 gap-0.5" role="status" aria-label="Importando o feed">
@@ -246,6 +321,11 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
             selecting={selectionActive}
             selectedIds={selectedIds}
             onReorder={persistOrder}
+            emptyText={
+              !clientMode && filter !== "all"
+                ? "Nada com esse status."
+                : "Grade em branco, ideia nova."
+            }
           />
         )}
       </PhoneFrame>

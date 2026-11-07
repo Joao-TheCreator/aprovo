@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -20,16 +21,17 @@ export default async function PerfilAprovacoesPage({
   const requests = await listApprovalRequests(id);
 
   return (
-    <PhoneFrame className="flex flex-col gap-5">
+    <PhoneFrame className="flex flex-col gap-6 pb-8">
       <LiveUpdates profileId={id} />
-      <div>
+      <div className="flex flex-col gap-2">
         <Link
           href={`/perfis/${id}`}
-          className="text-roxo focus-visible:ring-ring/50 inline-flex min-h-11 items-center rounded text-sm font-semibold outline-none focus-visible:ring-[3px]"
+          className="text-brand-ink focus-visible:ring-ring -ml-1 inline-flex min-h-11 items-center gap-1 self-start rounded-full px-1 text-sm font-bold outline-none focus-visible:ring-2"
         >
-          ← @{feed.profile.igUsername}
+          <ArrowLeft aria-hidden className="size-4" />@{feed.profile.igUsername}
         </Link>
-        <h1 className="text-2xl leading-8 font-bold">Envios para aprovação</h1>
+        <h1 className="font-display text-h1 text-balance">Envios</h1>
+        <p className="text-body text-muted-foreground">Quem abriu, quem decidiu e o que falta.</p>
       </div>
       <ApprovalList requests={requests} feedHref={`/perfis/${id}`} />
     </PhoneFrame>

@@ -125,8 +125,9 @@ function Tile({
             )?.onKeyDown?.(e);
         }}
         className={cn(
-          "focus-visible:ring-ring/60 relative block touch-pan-x overflow-hidden rounded-xl outline-none focus-visible:ring-[3px]",
-          item.status === "error" && "ring-destructive ring-2",
+          "press focus-visible:ring-ring focus-visible:ring-offset-background relative block touch-pan-x overflow-hidden rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          item.status === "error" && "ring-danger-ink ring-2",
+          isDragging && "shadow-glow scale-[1.04]",
           aspect,
         )}
       >
@@ -135,7 +136,7 @@ function Tile({
             src={item.src}
             crop={item.crop}
             ratio={ratio}
-            className="size-full"
+            className="bg-surface-2 size-full"
             imgClassName="pointer-events-none"
           />
         ) : item.videoSrc ? (
@@ -147,7 +148,7 @@ function Tile({
             className="pointer-events-none size-full object-cover"
           />
         ) : (
-          <div className="size-full bg-neutral-200" />
+          <div className="skeleton-shimmer animate-shimmer size-full" />
         )}
 
         {item.status === "uploading" ? (
@@ -162,7 +163,7 @@ function Tile({
           </div>
         ) : null}
         {item.status === "error" ? (
-          <div className="bg-destructive/85 absolute inset-0 flex flex-col items-center justify-center gap-1 p-1 text-center text-white">
+          <div className="bg-danger/85 absolute inset-0 flex flex-col items-center justify-center gap-1 p-1 text-center text-white">
             <AlertCircle aria-hidden className="size-5" />
             {item.canRetry === false ? (
               <span className="line-clamp-4 text-[10px] leading-3">{item.error}</span>
@@ -175,7 +176,7 @@ function Tile({
         <button
           type="button"
           onClick={() => onRetry(item.id)}
-          className="text-destructive focus-visible:ring-ring/50 mt-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-lg text-xs font-semibold outline-none focus-visible:ring-[3px]"
+          className="text-danger-ink focus-visible:ring-ring mt-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-full text-xs font-bold outline-none focus-visible:ring-2"
         >
           <RotateCw aria-hidden className="size-3.5" />
           Tentar de novo
@@ -183,8 +184,8 @@ function Tile({
       ) : (
         <p
           className={cn(
-            "mt-1 text-center text-[11px]",
-            item.status === "error" ? "text-destructive font-semibold" : "text-muted-foreground",
+            "mt-1 text-center text-[11px] font-semibold",
+            item.status === "error" ? "text-danger-ink" : "text-muted-foreground",
           )}
         >
           {STATUS_TEXT[item.status]}
@@ -197,9 +198,9 @@ function Tile({
           aria-label={`Remover mídia ${index + 1}`}
           onClick={() => onRemove(item.id)}
           onKeyDown={(e) => e.stopPropagation()}
-          className="focus-visible:ring-ring/60 absolute -top-2 -right-2 z-10 flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-[3px]"
+          className="focus-visible:ring-ring absolute -top-2 -right-2 z-10 flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2"
         >
-          <span className="flex size-6 items-center justify-center rounded-full bg-black/75 text-white">
+          <span className="flex size-6 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white backdrop-blur-md">
             <X aria-hidden className="size-4" />
           </span>
         </button>
@@ -253,7 +254,7 @@ export function MediaStrip({
       <SortableContext items={items.map((i) => i.id)} strategy={horizontalListSortingStrategy}>
         <ul
           aria-label="Mídias da publicação"
-          className="-mx-4 flex gap-3 overflow-x-auto px-4 pt-3 pb-2"
+          className="-mx-4 flex [scrollbar-width:thin] gap-3 overflow-x-auto px-4 pt-3 pb-2"
         >
           {items.map((item, i) => (
             <Tile
@@ -275,7 +276,7 @@ export function MediaStrip({
                 onClick={onAdd}
                 aria-label={addLabel}
                 className={cn(
-                  "border-primary/40 text-primary bg-lavanda/50 focus-visible:ring-ring/60 flex w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed text-xs font-semibold outline-none focus-visible:ring-[3px]",
+                  "press border-brand-ink/40 text-brand-ink bg-brand-soft/60 hover:bg-brand-soft focus-visible:ring-ring flex w-full flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed text-xs font-bold outline-none focus-visible:ring-2",
                   aspect,
                 )}
               >

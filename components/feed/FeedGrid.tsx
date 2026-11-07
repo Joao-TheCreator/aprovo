@@ -16,6 +16,7 @@ export function FeedGrid({
   selecting = false,
   selectedIds,
   onReorder,
+  emptyText = "Grade em branco, ideia nova.",
 }: {
   items: FeedItem[];
   ratio: "1:1" | "3:4";
@@ -26,18 +27,19 @@ export function FeedGrid({
   selecting?: boolean;
   selectedIds?: ReadonlySet<string>;
   onReorder?: (next: string[], prev: string[]) => void;
+  /** Text next to the dashed cell when there is nothing to show. */
+  emptyText?: string;
 }) {
   if (items.length === 0) {
     return (
       <div className="grid grid-cols-3 gap-0.5">
         <div
+          aria-hidden
           className={`flex flex-col items-center justify-center gap-1 border border-dashed border-neutral-400 text-neutral-500 ${ratio === "3:4" ? "aspect-[3/4]" : "aspect-square"}`}
         >
-          <Plus aria-hidden className="size-6" />
+          <Plus className="size-6" />
         </div>
-        <p className="col-span-2 flex items-center px-3 text-sm text-neutral-500">
-          Nenhuma publicação ainda
-        </p>
+        <p className="col-span-2 flex items-center px-3 text-sm text-neutral-500">{emptyText}</p>
       </div>
     );
   }

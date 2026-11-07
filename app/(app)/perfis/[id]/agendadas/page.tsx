@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -16,16 +17,19 @@ export default async function PerfilAgendadasPage({ params }: { params: Promise<
   const lists = await listPublications(id);
 
   return (
-    <PhoneFrame className="flex flex-col gap-5">
+    <PhoneFrame className="flex flex-col gap-8">
       <LiveUpdates profileId={id} />
-      <div>
+      <div className="flex flex-col gap-2">
         <Link
           href={`/perfis/${id}`}
-          className="text-roxo focus-visible:ring-ring/50 inline-flex min-h-11 items-center rounded text-sm font-semibold outline-none focus-visible:ring-[3px]"
+          className="press text-brand-ink text-caption focus-visible:ring-ring -ml-1 inline-flex min-h-11 w-fit items-center gap-1.5 rounded-full px-1 outline-none focus-visible:ring-2"
         >
-          ← @{feed.profile.igUsername}
+          <ArrowLeft aria-hidden className="size-4" />@{feed.profile.igUsername}
         </Link>
-        <h1 className="text-2xl leading-8 font-bold">Agendadas</h1>
+        <h1 className="font-display text-h1">Agendadas</h1>
+        <p className="text-body text-muted-foreground">
+          O que vai sair, o que já saiu e o que travou no caminho.
+        </p>
       </div>
       <ScheduledList profileId={id} lists={lists} />
     </PhoneFrame>

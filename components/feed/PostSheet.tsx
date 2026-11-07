@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ArrowRight, ExternalLink, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -64,12 +64,10 @@ export function PostSheet({
               <img
                 src={item.thumbUrl}
                 alt=""
-                className="max-h-[50dvh] w-full rounded-xl bg-neutral-100 object-contain"
+                className="bg-surface-2 max-h-[50dvh] w-full rounded-3xl object-contain"
               />
             ) : null}
-            {item.caption ? (
-              <p className="text-[15px] whitespace-pre-line">{item.caption}</p>
-            ) : null}
+            {item.caption ? <p className="text-body whitespace-pre-line">{item.caption}</p> : null}
             {item.permalink ? (
               <Button asChild variant="outline">
                 <a href={item.permalink} target="_blank" rel="noopener noreferrer">
@@ -83,6 +81,7 @@ export function PostSheet({
               disabled={pending}
               onClick={() => toggleHidden(!item.isHidden)}
             >
+              {item.isHidden ? <Eye aria-hidden /> : <EyeOff aria-hidden />}
               {item.isHidden ? "Mostrar na grade" : "Ocultar da grade"}
             </Button>
           </>
@@ -97,10 +96,13 @@ export function PostSheet({
             </SheetHeader>
             <StatusPill status={item.status} className="self-start" />
             {item.caption ? (
-              <p className="line-clamp-4 text-[15px] whitespace-pre-line">{item.caption}</p>
+              <p className="text-body line-clamp-4 whitespace-pre-line">{item.caption}</p>
             ) : null}
             <Button asChild>
-              <Link href={`/perfis/${profileId}/posts/${item.id}`}>Abrir publicação</Link>
+              <Link href={`/perfis/${profileId}/posts/${item.id}`}>
+                Abrir publicação
+                <ArrowRight aria-hidden />
+              </Link>
             </Button>
           </>
         ) : (

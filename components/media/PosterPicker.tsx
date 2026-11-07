@@ -34,9 +34,9 @@ export function PosterPicker({
         onLoadedMetadata={(e) => {
           e.currentTarget.currentTime = value;
         }}
-        className="mx-auto max-h-64 rounded-xl bg-black"
+        className="mx-auto max-h-64 rounded-2xl bg-black"
       />
-      <label className="text-sm font-semibold" htmlFor="poster-range">
+      <label className="text-caption" htmlFor="poster-range">
         Escolher capa
       </label>
       <Slider

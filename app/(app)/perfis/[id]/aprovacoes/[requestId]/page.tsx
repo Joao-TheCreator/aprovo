@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -18,13 +19,14 @@ export default async function EnvioPage({
   if (!request || request.profile.id !== id) notFound();
 
   return (
-    <PhoneFrame className="flex flex-col gap-5">
+    <PhoneFrame className="flex flex-col gap-4 pb-8">
       <LiveUpdates profileId={id} />
       <Link
         href={`/perfis/${id}/aprovacoes`}
-        className="text-roxo focus-visible:ring-ring/50 inline-flex min-h-11 items-center self-start rounded text-sm font-semibold outline-none focus-visible:ring-[3px]"
+        className="text-brand-ink focus-visible:ring-ring -ml-1 inline-flex min-h-11 items-center gap-1 self-start rounded-full px-1 text-sm font-bold outline-none focus-visible:ring-2"
       >
-        ← Envios
+        <ArrowLeft aria-hidden className="size-4" />
+        Envios
       </Link>
       <ApprovalRequestCard request={request} showProfile defaultExpanded />
     </PhoneFrame>

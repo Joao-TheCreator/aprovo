@@ -1,18 +1,20 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronDown, Loader2, StickyNote } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { PhoneFrame } from "@/components/app/PhoneFrame";
+import { ClientComment } from "@/components/feed/ClientComment";
 import { StatusPill } from "@/components/feed/StatusPill";
 import { CropEditor } from "@/components/media/CropEditor";
 import { CroppedImage } from "@/components/media/CroppedImage";
 import { HashtagInput } from "@/components/media/HashtagInput";
 import { MediaStrip, type StripItem } from "@/components/media/MediaStrip";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { uploadFile, UploadError, validateFile } from "@/lib/media/client-upload";
@@ -47,6 +49,43 @@ type Pending = {
   error?: string;
 };
 
+/** Live caption counter: a ring that fills up, amber near the limit and red at it. */
+function CaptionCounter({ length, max }: { length: number; max: number }) {
+  const r = 9;
+  const c = 2 * Math.PI * r;
+  const ratio = Math.min(1, length / max);
+  const near = length > max - 100;
+  const full = length >= max;
+  const tone = full ? "text-danger-ink" : near ? "text-warning-ink" : "text-brand-ink";
+  return (
+    <p
+      id="caption-count"
+      aria-live="polite"
+      className={cn(
+        "text-caption flex items-center gap-2 tabular-nums",
+        near ? tone : "text-muted-foreground",
+      )}
+    >
+      <svg viewBox="0 0 24 24" className={cn("size-6 -rotate-90", tone)} aria-hidden>
+        <circle cx="12" cy="12" r={r} fill="none" strokeWidth="3" className="stroke-surface-2" />
+        <circle
+          cx="12"
+          cy="12"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - ratio)}
+          className="transition-[stroke-dashoffset] duration-(--ap-dur-base)"
+        />
+      </svg>
+      {length}/{max}
+    </p>
+  );
+}
+
 export function PostEditor({ post }: { post: PostDetail }) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
@@ -60,6 +99,8 @@ export function PostEditor({ post }: { post: PostDetail }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const draftKey = `aprovo:post-draft:${post.id}`;
   const restored = useRef(false);
+  // Notes start open only when there is something in them (collapsible section).
+  const [notesInitiallyOpen] = useState(() => Boolean(post.notes));
 
   // Local media order overrides the server list only until the server list changes (refresh).
   const media = local && local.base === post.media ? local.list : post.media;
@@ -247,25 +288,34 @@ export function PostEditor({ post }: { post: PostDetail }) {
   const cellAspect = ratio === "3:4" ? "aspect-[3/4]" : "aspect-square";
 
   return (
-    <PhoneFrame className="flex flex-col gap-5 pb-40 md:pb-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">Editar publicação</h1>
+    <PhoneFrame className="flex flex-col gap-5 pb-44 md:pb-4">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-h2">Editar publicação</h1>
         <StatusPill status={post.status} />
       </div>
 
       {post.status === "approved" ? (
-        <p role="status" className="bg-lavanda rounded-2xl p-3 text-sm font-semibold">
+        <p
+          role="status"
+          className="border-warning/40 bg-warning/10 text-body flex items-center gap-3 rounded-3xl border p-4 font-semibold"
+        >
+          <span
+            aria-hidden
+            className="bg-warning text-ink flex size-9 shrink-0 items-center justify-center rounded-2xl"
+          >
+            <AlertTriangle className="size-4.5" strokeWidth={2.25} />
+          </span>
           Editar vai exigir nova aprovação.
         </p>
       ) : null}
       {post.status === "changes_requested" && post.lastClientComment ? (
-        <div role="status" className="bg-lavanda rounded-2xl p-3 text-sm">
-          <p className="text-roxo font-semibold">Comentário do cliente</p>
-          <p className="whitespace-pre-line">{post.lastClientComment}</p>
-        </div>
+        <ClientComment comment={post.lastClientComment} />
       ) : null}
 
-      <section aria-label="Mídias" className="bg-card rounded-2xl p-3">
+      <section
+        aria-label="Mídias"
+        className="bg-card border-border shadow-card rounded-3xl border p-4"
+      >
         <MediaStrip
           items={stripItems}
           ratio={ratio}
@@ -281,7 +331,7 @@ export function PostEditor({ post }: { post: PostDetail }) {
           }
           addLabel="Adicionar mais fotos"
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-caption text-muted-foreground font-medium">
           {isVideo
             ? "Vídeo único. A capa é o frame escolhido no envio."
             : "Toque numa foto para ajustar o enquadramento na grade."}
@@ -299,86 +349,116 @@ export function PostEditor({ post }: { post: PostDetail }) {
         />
       </section>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="caption">Legenda</Label>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-end justify-between gap-2">
+          <Label htmlFor="caption">Legenda</Label>
+          <CaptionCounter length={caption.length} max={CAPTION_MAX} />
+        </div>
         <Textarea
           id="caption"
           value={caption}
           maxLength={CAPTION_MAX}
           rows={6}
+          placeholder="Escreva a legenda do post"
           onChange={(e) => setCaption(e.target.value)}
           aria-describedby="caption-count"
         />
-        <p
-          id="caption-count"
-          className={cn(
-            "text-right text-xs",
-            caption.length > CAPTION_MAX - 100 ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {caption.length}/{CAPTION_MAX}
-        </p>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         <Label htmlFor="hashtags">Hashtags</Label>
         <HashtagInput id="hashtags" value={hashtags} onChange={setHashtags} />
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         <Label htmlFor="scheduled">Data prevista</Label>
-        <div className="flex gap-2">
-          <input
-            id="scheduled"
-            type="datetime-local"
-            value={scheduled}
-            onChange={(e) => setScheduled(e.target.value)}
-            className="border-input bg-card focus-visible:ring-ring/50 h-11 min-w-0 flex-1 rounded-full border px-4 text-[15px] outline-none focus-visible:ring-[3px]"
-          />
-          <Button variant="secondary" onClick={() => setScheduled("")} disabled={!scheduled}>
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <CalendarDays
+              aria-hidden
+              className="text-brand-ink pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2"
+            />
+            <Input
+              id="scheduled"
+              type="datetime-local"
+              value={scheduled}
+              onChange={(e) => setScheduled(e.target.value)}
+              className="pl-12"
+            />
+          </div>
+          <Button variant="ghost" onClick={() => setScheduled("")} disabled={!scheduled}>
             Limpar
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="notes">Observações internas</Label>
-        <Textarea
-          id="notes"
-          value={notes}
-          maxLength={2000}
-          rows={3}
-          onChange={(e) => setNotes(e.target.value)}
-          aria-describedby="notes-help"
-        />
-        <p id="notes-help" className="text-muted-foreground text-xs">
-          Não aparece para o cliente
-        </p>
-      </div>
+      <details
+        open={notesInitiallyOpen}
+        className="group bg-surface-2/60 border-border rounded-3xl border"
+      >
+        <summary className="focus-visible:ring-ring flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-3xl px-4 outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden">
+          <StickyNote aria-hidden className="text-brand-ink size-5" />
+          <span className="text-title flex-1">Observações internas</span>
+          {notes ? <span aria-hidden className="bg-brand-ink size-2 rounded-full" /> : null}
+          <ChevronDown
+            aria-hidden
+            className="text-muted-foreground ease-spring size-5 transition-transform duration-(--ap-dur-fast) group-open:rotate-180"
+          />
+        </summary>
+        <div className="flex flex-col gap-1.5 px-4 pb-4">
+          <Label htmlFor="notes" className="sr-only">
+            Observações internas
+          </Label>
+          <Textarea
+            id="notes"
+            value={notes}
+            maxLength={2000}
+            rows={3}
+            onChange={(e) => setNotes(e.target.value)}
+            aria-describedby="notes-help"
+          />
+          <p id="notes-help" className="text-caption text-muted-foreground font-medium">
+            Não aparece para o cliente
+          </p>
+        </div>
+      </details>
 
-      <section aria-label="Como fica no feed" className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Como fica no feed</h2>
-        <div className="grid grid-cols-3 gap-0.5 self-center" style={{ width: 330 }}>
-          {Array.from({ length: 9 }).map((_, i) =>
-            i === 0 && previewSrc ? (
-              <CroppedImage
-                key={i}
-                src={previewSrc}
-                crop={isVideo ? null : first?.gridCrop}
-                ratio={ratio}
-                className={cellAspect}
-              />
-            ) : (
-              <div key={i} aria-hidden className={cn("bg-lavanda", cellAspect)} />
-            ),
-          )}
+      <section aria-labelledby="feed-preview-title" className="flex flex-col gap-3">
+        <h2 id="feed-preview-title" className="text-title">
+          Como fica no feed
+        </h2>
+        {/* Instagram simulation: light island so it looks like the app in dark mode too. */}
+        <div
+          data-theme="light"
+          className="shadow-card mx-auto w-full max-w-[330px] overflow-hidden rounded-3xl border border-neutral-200 bg-white p-2"
+        >
+          <div className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-2xl">
+            {Array.from({ length: 9 }).map((_, i) =>
+              i === 0 && previewSrc ? (
+                <div key={i} className="relative">
+                  <CroppedImage
+                    src={previewSrc}
+                    crop={isVideo ? null : first?.gridCrop}
+                    ratio={ratio}
+                    className={cellAspect}
+                  />
+                  <span
+                    aria-hidden
+                    className="ring-brand-ink pointer-events-none absolute inset-0 ring-2 ring-inset"
+                  />
+                </div>
+              ) : (
+                <div key={i} aria-hidden className={cn("bg-neutral-100", cellAspect)} />
+              ),
+            )}
+          </div>
         </div>
       </section>
 
-      <div className="border-border bg-background/95 fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 flex gap-2 border-t px-4 py-3 backdrop-blur md:sticky md:inset-x-auto md:bottom-0 md:px-0">
-        <div className="mx-auto flex w-full gap-2 md:max-w-[430px]">
+      <div className="fixed inset-x-3 bottom-[calc(var(--app-nav-offset,5.25rem)+0.75rem)] z-20 md:sticky md:inset-x-auto md:bottom-6">
+        <div className="glass shadow-sheet mx-auto flex w-full gap-2 rounded-4xl border border-white/10 p-2 md:max-w-[430px]">
           <Button variant="secondary" className="flex-1" onClick={save} disabled={saving}>
-            {saving ? <Loader2 aria-hidden className="animate-spin" /> : null}
+            {saving ? <Loader2 aria-hidden className="motion-safe:animate-spin" /> : null}
             Salvar rascunho
           </Button>
           {canSend ? (

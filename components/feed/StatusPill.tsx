@@ -63,17 +63,32 @@ export type StatusPillVariant = "dot" | "solid" | "overlay";
  * - `solid`: v1-style filled pill with icon (for emphasis in headers).
  * - `overlay`: dark glass for use on top of photos (feed grid); always dark-themed.
  * The label is plain text in the pill, so `getByText("Aprovada", { exact: true })` keeps working.
+ * `short` (optional, for tight spots like grid cells) shows only the first word of two-word
+ * labels ("Aguardando", "Ajustes"); the rest stays in the DOM for screen readers.
  */
 export function StatusPill({
   status,
   className,
   variant = "dot",
+  short = false,
 }: {
   status: PostStatus;
   className?: string;
   variant?: StatusPillVariant;
+  short?: boolean;
 }) {
   const { icon: Icon, dot, solid, live } = STATUS_STYLES[status];
+  const full = STATUS_LABELS[status];
+  const space = full.indexOf(" ");
+  const label =
+    short && space > 0 ? (
+      <>
+        {full.slice(0, space)}
+        <span className="sr-only">{full.slice(space)}</span>
+      </>
+    ) : (
+      full
+    );
 
   if (variant === "solid") {
     return (
@@ -86,7 +101,7 @@ export function StatusPill({
         )}
       >
         <Icon className="size-3.5" strokeWidth={2} aria-hidden />
-        {STATUS_LABELS[status]}
+        {label}
       </span>
     );
   }
@@ -107,7 +122,7 @@ export function StatusPill({
         aria-hidden
         className={cn("size-2 shrink-0 rounded-full bg-current", dot, live && "animate-pulse-dot")}
       />
-      {STATUS_LABELS[status]}
+      {label}
     </span>
   );
 }

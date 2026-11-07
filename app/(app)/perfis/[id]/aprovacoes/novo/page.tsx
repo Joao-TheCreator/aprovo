@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { SendForApprovalForm, type CandidatePost } from "@/components/approvals/SendForApprovalForm";
+import {
+  SendForApprovalForm,
+  type CandidatePost,
+} from "@/components/approvals/SendForApprovalForm";
 import { getProfileFeed } from "@/lib/profiles/queries";
 
 export const metadata = { title: "Enviar para aprovação" };

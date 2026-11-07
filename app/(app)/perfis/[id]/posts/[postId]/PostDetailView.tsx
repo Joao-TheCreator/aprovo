@@ -1,15 +1,28 @@
 "use client";
 
-import { Bookmark, Heart, MessageCircle, MoreHorizontal, Send } from "lucide-react";
+import {
+  AlertTriangle,
+  Bookmark,
+  CalendarClock,
+  Heart,
+  Link as LinkIcon,
+  Loader2,
+  MessageCircle,
+  MoreHorizontal,
+  Pencil,
+  Send,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { PhoneFrame } from "@/components/app/PhoneFrame";
+import { ClientComment } from "@/components/feed/ClientComment";
 import { StatusPill } from "@/components/feed/StatusPill";
 import { CropEditor } from "@/components/media/CropEditor";
 import { ScheduleSheet, type ScheduleTarget } from "@/components/publishing/ScheduleSheet";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,7 +42,7 @@ import { archivePost, deletePost } from "@/lib/posts/actions";
 import type { PostDetail } from "@/lib/posts/contracts";
 import { cancelPublication } from "@/lib/publishing/actions";
 import type { LivePublication } from "@/lib/publishing/contracts";
-import { describeSchedule } from "@/lib/publishing/time";
+import { formatInZone, zoneLabel } from "@/lib/publishing/time";
 
 function formatScheduled(d: Date | string): string {
   const date = new Date(d);
@@ -87,7 +100,7 @@ function Carousel({ post }: { post: PostDetail }) {
       </ul>
       {post.media.length > 1 ? (
         <>
-          <span className="absolute top-3 right-3 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white">
+          <span className="absolute top-3 right-3 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">
             {index + 1}/{post.media.length}
           </span>
           <div aria-hidden className="flex justify-center gap-1 pt-2">
@@ -212,123 +225,99 @@ export function PostDetailView({
     });
   }
 
+  const scheduledLabel = scheduledPub
+    ? formatInZone(scheduledPub.scheduledAt, scheduledPub.timezone)
+    : null;
+
   return (
     <div className="flex flex-col gap-4">
-      <PhoneFrame className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill status={post.status} />
-          {archived ? (
-            <span className="bg-secondary text-secondary-foreground rounded-full px-2.5 py-1 text-xs font-semibold">
-              Arquivada
-            </span>
-          ) : null}
-        </div>
-        {post.lastClientComment ? (
-          <div role="status" className="bg-lavanda rounded-2xl p-3 text-sm">
-            <p className="text-roxo font-semibold">Comentário do cliente</p>
-            <p className="whitespace-pre-line">{post.lastClientComment}</p>
-          </div>
-        ) : null}
-        {scheduledPub ? (
-          <div role="status" className="bg-lavanda flex flex-col gap-3 rounded-2xl p-3 text-sm">
-            <p className="text-roxo font-semibold" suppressHydrationWarning>
-              Agendada para {describeSchedule(scheduledPub.scheduledAt, scheduledPub.timezone)}
-            </p>
+      {post.lastClientComment ? (
+        <PhoneFrame>
+          <ClientComment comment={post.lastClientComment} />
+        </PhoneFrame>
+      ) : null}
+
+      {scheduledPub && scheduledLabel ? (
+        <PhoneFrame>
+          <div
+            role="status"
+            className="bg-card shadow-glow animate-rise flex flex-col gap-4 rounded-3xl border border-transparent p-5"
+          >
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden
+                className="bg-gradient-brand text-on-brand flex size-12 shrink-0 items-center justify-center rounded-2xl"
+              >
+                <CalendarClock className="size-6" strokeWidth={2} />
+              </span>
+              <div className="flex min-w-0 flex-col">
+                <p className="text-title" suppressHydrationWarning>
+                  Agendada para {scheduledLabel.day} às {scheduledLabel.time}
+                </p>
+                <p className="text-caption text-muted-foreground font-medium">
+                  Horário de {zoneLabel(scheduledPub.timezone)}
+                </p>
+              </div>
+            </div>
             {scheduledPub.status === "publishing" ? (
-              <p>Publicando agora no Instagram…</p>
+              <p className="text-body text-brand-ink flex items-center gap-2 font-semibold">
+                <Loader2 aria-hidden className="size-4 motion-safe:animate-spin" />
+                Publicando agora no Instagram…
+              </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <Button variant="secondary" onClick={() => setScheduleOpen(true)}>
+                  <CalendarClock aria-hidden />
                   Reagendar
                 </Button>
-                <Button variant="outline" onClick={() => setConfirmCancel(true)}>
+                <Button
+                  variant="outline"
+                  className="border-danger-ink/60 text-danger-ink hover:border-danger-ink hover:text-danger-ink whitespace-normal"
+                  onClick={() => setConfirmCancel(true)}
+                >
                   Cancelar agendamento
                 </Button>
               </div>
             )}
           </div>
-        ) : null}
-        {failedPub ? (
+        </PhoneFrame>
+      ) : null}
+
+      {failedPub ? (
+        <PhoneFrame>
           <div
             role="alert"
-            className="bg-destructive/10 text-destructive flex flex-col gap-3 rounded-2xl p-3 text-sm"
+            className="border-danger-ink/50 bg-danger/10 shadow-glow-danger animate-rise flex flex-col gap-3 rounded-3xl border p-5"
           >
-            <p className="font-semibold">Não foi possível publicar</p>
-            <p>{failedPub.lastError ?? "Não foi possível publicar. Tente novamente."}</p>
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden
+                className="bg-danger text-destructive-foreground flex size-12 shrink-0 items-center justify-center rounded-2xl"
+              >
+                <AlertTriangle className="size-6" strokeWidth={2} />
+              </span>
+              <p className="text-title text-danger-ink">Não foi possível publicar</p>
+            </div>
+            <p className="text-body">
+              {failedPub.lastError ?? "Não foi possível publicar. Tente novamente."}
+            </p>
             <Button
               variant="secondary"
               className="self-start"
               onClick={() => setScheduleOpen(true)}
             >
+              <CalendarClock aria-hidden />
               Reagendar
             </Button>
           </div>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link href={`/perfis/${post.profileId}/posts/${post.id}/editar`}>Editar</Link>
-          </Button>
-          {post.status === "approved" && publishing.canPublish ? (
-            <Button onClick={() => setScheduleOpen(true)}>Agendar</Button>
-          ) : null}
-          {canSend ? (
-            <Button asChild variant="secondary">
-              <Link href={`/perfis/${post.profileId}/aprovacoes/novo?posts=${post.id}`}>
-                Enviar para aprovação
-              </Link>
-            </Button>
-          ) : post.status === "pending_approval" ? (
-            <>
-              <span className="text-roxo flex min-h-11 items-center text-sm font-semibold">
-                Aguardando aprovação
-              </span>
-              <Button asChild variant="outline">
-                <Link href={approvalsHref}>Ver envio</Link>
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="secondary"
-              disabled
-              title={
-                post.status === "approved"
-                  ? "Publicação já aprovada"
-                  : "Aguarde o processamento das mídias"
-              }
-            >
-              Enviar para aprovação
-            </Button>
-          )}
-          {post.status === "pending_approval" ? (
-            <Button asChild variant="outline" title="Gere um novo link na lista de envios">
-              <Link href={approvalsHref}>Copiar link</Link>
-            </Button>
-          ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Mais ações"
-              className="bg-secondary text-secondary-foreground focus-visible:ring-ring/50 flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-[3px]"
-            >
-              <MoreHorizontal aria-hidden className="size-5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {post.kind === "post" && post.media[0] ? (
-                <DropdownMenuItem onSelect={() => setCropOpen(true)}>
-                  Editar enquadramento
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem onSelect={toggleArchive} disabled={pending}>
-                {archived ? "Desarquivar" : "Arquivar"}
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
-                Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </PhoneFrame>
+        </PhoneFrame>
+      ) : null}
 
-      <PhoneFrame className="font-instagram border-border overflow-hidden bg-white pb-4 text-black md:rounded-2xl md:border">
+      {/* Instagram simulation: light theme island, faithful to the app in both themes. */}
+      <PhoneFrame
+        data-theme="light"
+        className="font-instagram md:shadow-card overflow-hidden bg-white pb-4 text-black md:rounded-[2rem] md:border md:border-neutral-200"
+      >
         <div className="flex h-14 items-center gap-3 px-3">
           {post.profile.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -370,6 +359,87 @@ export function PostDetailView({
             Data prevista: {formatScheduled(post.scheduledFor)}
           </p>
         ) : null}
+      </PhoneFrame>
+
+      {/* APROVO action bar: glass card that sticks above the bottom nav while scrolling. */}
+      <PhoneFrame className="sticky bottom-[calc(var(--app-nav-offset,5.25rem)+0.75rem)] z-20 md:bottom-6">
+        <div
+          role="region"
+          aria-label="Ações da publicação"
+          className="glass shadow-sheet flex flex-col gap-3 rounded-4xl border border-white/10 p-3"
+        >
+          <div className="flex items-center gap-2 pl-1">
+            <StatusPill status={post.status} variant="solid" />
+            {archived ? <Badge variant="glass">Arquivada</Badge> : null}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Mais ações"
+                className="press bg-surface-2 hover:bg-brand-soft focus-visible:ring-ring ml-auto flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+              >
+                <MoreHorizontal aria-hidden className="size-5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {post.kind === "post" && post.media[0] ? (
+                  <DropdownMenuItem onSelect={() => setCropOpen(true)}>
+                    Editar enquadramento
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onSelect={toggleArchive} disabled={pending}>
+                  {archived ? "Desarquivar" : "Arquivar"}
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
+                  Excluir
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {post.status === "approved" && !publishing.canPublish ? (
+            <p className="text-caption text-muted-foreground px-1 font-medium">
+              Conecte a conta com permissão de publicar para agendar.
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2 [&>*]:min-w-[8.5rem] [&>*]:flex-1">
+            <Button asChild variant="secondary">
+              <Link href={`/perfis/${post.profileId}/posts/${post.id}/editar`}>
+                <Pencil aria-hidden />
+                Editar
+              </Link>
+            </Button>
+            {post.status === "approved" && publishing.canPublish ? (
+              <Button onClick={() => setScheduleOpen(true)}>
+                <CalendarClock aria-hidden />
+                Agendar
+              </Button>
+            ) : null}
+            {canSend ? (
+              <Button asChild>
+                <Link href={`/perfis/${post.profileId}/aprovacoes/novo?posts=${post.id}`}>
+                  <Send aria-hidden />
+                  Enviar para aprovação
+                </Link>
+              </Button>
+            ) : post.status === "pending_approval" ? (
+              <>
+                <Button asChild variant="outline">
+                  <Link href={approvalsHref}>Ver envio</Link>
+                </Button>
+                <Button asChild variant="outline" title="Gere um novo link na lista de envios">
+                  <Link href={approvalsHref}>
+                    <LinkIcon aria-hidden />
+                    Copiar link
+                  </Link>
+                </Button>
+              </>
+            ) : post.status === "draft" || post.status === "changes_requested" ? (
+              <Button disabled title="Aguarde o processamento das mídias">
+                <Send aria-hidden />
+                Enviar para aprovação
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </PhoneFrame>
 
       {cropOpen && post.media[0] ? (

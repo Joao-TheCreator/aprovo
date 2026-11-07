@@ -27,6 +27,15 @@ import { cn } from "@/lib/utils";
 
 const RATIOS: GridRatio[] = ["1:1", "3:4"];
 
+/** Chip shell shared by toolbar toggles and links (docs/14: rail of pills, active in gradient). */
+export const chipClass = (active = false) =>
+  cn(
+    "press focus-visible:ring-ring focus-visible:ring-offset-background inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-caption font-bold whitespace-nowrap outline-none transition-[background-color,color,box-shadow] duration-(--ap-dur-fast) focus-visible:ring-2 focus-visible:ring-offset-2 [&_svg]:size-4 [&_svg]:shrink-0",
+    active
+      ? "bg-gradient-brand text-on-brand shadow-glow"
+      : "bg-surface-2 text-foreground hover:bg-brand-soft hover:text-brand-ink",
+  );
+
 function Chip({
   pressed,
   onClick,
@@ -37,16 +46,41 @@ function Chip({
   children: React.ReactNode;
 }) {
   return (
+    <button type="button" aria-pressed={pressed} onClick={onClick} className={chipClass(pressed)}>
+      {children}
+    </button>
+  );
+}
+
+/** "Modo cliente": glass toggle with a tiny switch knob (still a pressed-state button). */
+function ClientModeToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
     <button
       type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
+      aria-pressed={on}
+      onClick={() => onChange(!on)}
       className={cn(
-        "focus-visible:ring-ring/50 inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold outline-none focus-visible:ring-[3px]",
-        pressed ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
+        "press glass focus-visible:ring-ring focus-visible:ring-offset-background text-caption inline-flex h-11 shrink-0 items-center gap-2.5 rounded-full border pr-4 pl-1.5 font-bold whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+        on ? "border-brand-ink/50 text-brand-ink" : "text-foreground border-white/10",
       )}
     >
-      {children}
+      <span
+        aria-hidden
+        className={cn(
+          "relative flex h-8 w-13 items-center rounded-full p-1 transition-colors duration-(--ap-dur-fast)",
+          on ? "bg-gradient-brand shadow-glow" : "bg-surface-2",
+        )}
+      >
+        <span
+          className={cn(
+            "ease-spring flex size-6 items-center justify-center rounded-full shadow-sm transition-transform duration-(--ap-dur-fast)",
+            on ? "bg-on-brand text-brand translate-x-5" : "bg-outline-strong text-surface",
+          )}
+        >
+          <Eye className="size-3.5" strokeWidth={2.5} />
+        </span>
+      </span>
+      Modo cliente
     </button>
   );
 }
@@ -116,67 +150,65 @@ export function FeedToolbar({
   }
 
   return (
-    <div className="mx-auto flex w-full flex-wrap items-center gap-2 md:max-w-[430px]">
-      <Button
-        variant="secondary"
-        onClick={refresh}
-        disabled={!canRefresh || pending}
-        title={canRefresh ? undefined : "Configure a API da Meta para atualizar"}
-      >
-        <RefreshCw aria-hidden />
-        Atualizar feed
-      </Button>
-
-      <div
-        role="group"
-        aria-label="Proporção da grade"
-        className="bg-secondary flex rounded-full p-0.5"
-      >
-        {RATIOS.map((r) => (
-          <button
-            key={r}
-            type="button"
-            aria-pressed={ratio === r}
-            onClick={() => changeRatio(r)}
-            className={cn(
-              "focus-visible:ring-ring/50 h-10 min-w-11 rounded-full px-3 text-sm font-semibold outline-none focus-visible:ring-[3px]",
-              ratio === r ? "bg-primary text-primary-foreground" : "text-secondary-foreground",
-            )}
-          >
-            {r}
-          </button>
-        ))}
-      </div>
-
-      <Chip pressed={clientMode} onClick={() => onClientModeChange(!clientMode)}>
-        Modo cliente
-      </Chip>
-      {!clientMode ? (
-        <Link
-          href={`/perfis/${profileId}/agendadas`}
-          className="bg-secondary text-secondary-foreground focus-visible:ring-ring/50 inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold outline-none focus-visible:ring-[3px]"
+    <div className="mx-auto flex w-full items-center gap-2 md:max-w-[430px]">
+      <div className="-my-1 flex min-w-0 flex-1 snap-x [scrollbar-width:none] items-center gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] py-1 pr-6 [&::-webkit-scrollbar]:hidden">
+        <ClientModeToggle on={clientMode} onChange={onClientModeChange} />
+        {!clientMode ? (
+          <Link href={`/perfis/${profileId}/agendadas`} className={chipClass()}>
+            <CalendarClock aria-hidden />
+            Agendadas
+          </Link>
+        ) : null}
+        {!clientMode ? (
+          <Chip pressed={selecting} onClick={() => onSelectingChange(!selecting)}>
+            <CheckSquare aria-hidden />
+            Selecionar
+          </Chip>
+        ) : null}
+        {hasHidden && !clientMode ? (
+          <Chip pressed={showHidden} onClick={() => onShowHiddenChange(!showHidden)}>
+            <Eye aria-hidden />
+            Mostrar ocultos
+          </Chip>
+        ) : null}
+        <div
+          role="group"
+          aria-label="Proporção da grade"
+          className="bg-surface-2 flex h-11 shrink-0 items-center rounded-full p-1"
         >
-          <CalendarClock aria-hidden className="size-4" />
-          Agendadas
-        </Link>
-      ) : null}
-      {!clientMode ? (
-        <Chip pressed={selecting} onClick={() => onSelectingChange(!selecting)}>
-          <CheckSquare aria-hidden className="size-4" />
-          Selecionar
-        </Chip>
-      ) : null}
-      {hasHidden && !clientMode ? (
-        <Chip pressed={showHidden} onClick={() => onShowHiddenChange(!showHidden)}>
-          <Eye aria-hidden className="size-4" />
-          Mostrar ocultos
-        </Chip>
-      ) : null}
+          {RATIOS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              aria-pressed={ratio === r}
+              onClick={() => changeRatio(r)}
+              className={cn(
+                "focus-visible:ring-ring text-caption relative h-9 min-w-11 rounded-full px-3 font-bold transition-[background-color,color] duration-(--ap-dur-fast) outline-none after:absolute after:-inset-1 after:content-[''] focus-visible:ring-2",
+                ratio === r
+                  ? "bg-gradient-brand text-on-brand"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={!canRefresh || pending}
+          title={canRefresh ? undefined : "Configure a API da Meta para atualizar"}
+          className={cn(chipClass(), "disabled:pointer-events-none disabled:opacity-45")}
+        >
+          <RefreshCw aria-hidden className={cn(pending && "motion-safe:animate-spin")} />
+          Atualizar feed
+        </button>
+      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Mais ações"
-          className="bg-secondary text-secondary-foreground focus-visible:ring-ring/50 ml-auto flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-[3px]"
+          className="press glass focus-visible:ring-ring flex size-11 shrink-0 items-center justify-center rounded-full border border-white/10 outline-none focus-visible:ring-2"
         >
           <MoreHorizontal aria-hidden className="size-5" />
         </DropdownMenuTrigger>
