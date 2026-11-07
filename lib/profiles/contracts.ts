@@ -17,7 +17,14 @@ export type ImportSource = "graph_api" | "fallback" | "manual";
 export type AccountType = "business" | "creator" | "personal" | "unknown";
 export type GridRatio = "1:1" | "3:4";
 export type ImportedMediaType = "image" | "carousel" | "video";
-export type PostStatus = "draft" | "pending_approval" | "approved" | "changes_requested";
+export type PostStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "changes_requested"
+  | "scheduled"
+  | "published"
+  | "publish_failed";
 
 export type ConnectErrorCode =
   | "invalid_username"
@@ -98,6 +105,9 @@ export type ProfileFeed = {
     gridRatio: GridRatio;
     /** Linked Instagram connection; null on manual profiles and after a disconnect. */
     connectionId: string | null;
+    /** Health of the linked connection; null without one. Absent in the public approval view. */
+    connectionStatus?:
+      "active" | "expired" | "missing_scope" | "not_professional" | "revoked" | null;
   };
   items: FeedItem[];
   /** True when the Graph API is configured on the server (controls the "Atualizar feed" button). */

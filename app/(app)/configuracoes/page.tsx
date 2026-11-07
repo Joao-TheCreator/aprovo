@@ -2,15 +2,25 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import Link from "next/link";
 
 import { db } from "@/db/client";
-import { profiles } from "@/db/schema";
+import { profiles, type InstagramConnection } from "@/db/schema";
 import { PhoneFrame } from "@/components/app/PhoneFrame";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCurrentWorkspace, requireUser } from "@/lib/auth/require";
-import { activeOAuthProvider, listConnections, isOAuthConfigured } from "@/lib/instagram/oauth";
+import {
+  activeOAuthProvider,
+  canPublish,
+  instagramScopes,
+  isOAuthConfigured,
+  listConnections,
+  PUBLISH_SCOPE,
+} from "@/lib/instagram/oauth";
+import { getPublishingQuota } from "@/lib/publishing/actions";
+import { countRescheduleableFailures } from "@/lib/publishing/connection-loss";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import { DisconnectButton } from "./DisconnectButton";
+import { RescheduleFailedButton } from "./RescheduleFailedButton";
 
 export const metadata = { title: "Configurações" };
 export const dynamic = "force-dynamic";
@@ -24,7 +34,21 @@ const ERRORS: Record<string, string> = {
     "Nenhuma Página do Facebook ligada a uma conta profissional do Instagram foi encontrada. No Instagram, vá em Configurações › Contas vinculadas e vincule uma Página do Facebook, depois tente de novo.",
 };
 
-const PUBLISH_SCOPE = "instagram_business_content_publish";
+/** Status line of a connection; null for a healthy one (rendered as a plain "Conexão ativa"). */
+function statusMessage(c: Pick<InstagramConnection, "status" | "username">): string | null {
+  switch (c.status) {
+    case "expired":
+      return `O Instagram @${c.username} desconectou. Reconecte para continuar.`;
+    case "missing_scope":
+      return "Reconecte e autorize 'Publicar conteúdo'.";
+    case "not_professional":
+      return `A conta @${c.username} deixou de ser profissional. Mude para Criador ou Empresa e reconecte.`;
+    case "revoked":
+      return "Acesso revogado no Instagram. Reconecte para voltar a usar.";
+    default:
+      return null;
+  }
+}
 
 function formatDate(d: Date) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(d);
@@ -59,7 +83,26 @@ export default async function ConfiguracoesPage({
         .where(and(eq(profiles.workspaceId, ws.id), isNotNull(profiles.connectionId)))
     : [];
   const profileByConnection = new Map(linked.map((p) => [p.connectionId, p.id]));
+  // Daily publishing quota per publish-capable account (cached 10 min; null when unavailable).
+  // TODO(T13?): "Avisar por e-mail quando publicar" toggle (needs `workspaces.notify_on_publish`).
+  const quotaByConnection = new Map(
+    await Promise.all(
+      connections.map(async (c) => {
+        const linkedProfileId = profileByConnection.get(c.id);
+        const quota =
+          linkedProfileId && c.status === "active" && canPublish(c)
+            ? await getPublishingQuota(linkedProfileId)
+            : null;
+        return [c.id, quota] as const;
+      }),
+    ),
+  );
+  // Publications that failed while the account was disconnected (offer "Reagendar" once active).
+  const failedByConnection = await countRescheduleableFailures(
+    connections.filter((c) => c.status === "active").map((c) => c.id),
+  );
   const configured = isOAuthConfigured();
+  const publishEnabled = instagramScopes().includes(PUBLISH_SCOPE);
   const activeProvider = activeOAuthProvider();
   const error = sp.error ? (ERRORS[sp.error] ?? ERRORS.exchange_failed) : null;
 
@@ -90,7 +133,10 @@ export default async function ConfiguracoesPage({
             <ul className="flex flex-col gap-4">
               {connections.map((c) => {
                 const profileId = profileByConnection.get(c.id);
-                const canPublish = c.scopes.includes(PUBLISH_SCOPE);
+                const publishGranted = canPublish(c);
+                const statusText = statusMessage(c);
+                const quota = quotaByConnection.get(c.id) ?? null;
+                const failedCount = failedByConnection.get(c.id) ?? 0;
                 const legacy = c.provider === "instagram" && activeProvider === "facebook";
                 return (
                   <li
@@ -114,13 +160,33 @@ export default async function ConfiguracoesPage({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="secondary">Feed</Badge>
-                      {canPublish ? <Badge variant="secondary">Publicação</Badge> : null}
+                      {publishGranted ? <Badge variant="secondary">Publicação</Badge> : null}
                     </div>
+                    {statusText ? (
+                      <p role="status" className="bg-lavanda rounded-xl px-4 py-3 text-sm">
+                        {statusText}
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">Conexão ativa</p>
+                    )}
+                    {quota ? (
+                      <p className="text-muted-foreground text-sm">
+                        Publicações hoje: {quota.used}/{quota.total}
+                      </p>
+                    ) : null}
+                    {publishEnabled && !publishGranted && c.status === "active" ? (
+                      <p className="text-muted-foreground text-xs">
+                        Reconecte para autorizar a publicação
+                      </p>
+                    ) : null}
                     {legacy ? (
                       <p role="status" className="bg-secondary rounded-xl px-4 py-3 text-sm">
                         Esta conexão usa o Login do Instagram. Este servidor está configurado para o
                         Login do Facebook; reconecte para usar o mesmo login.
                       </p>
+                    ) : null}
+                    {failedCount > 0 ? (
+                      <RescheduleFailedButton connectionId={c.id} count={failedCount} />
                     ) : null}
                     <div className="flex flex-wrap gap-3">
                       <Button asChild variant="secondary">
@@ -138,6 +204,11 @@ export default async function ConfiguracoesPage({
                 );
               })}
             </ul>
+            <p className="text-muted-foreground text-sm">
+              Para publicar automaticamente, a conta precisa ser profissional e autorizar
+              &apos;Publicar conteúdo&apos;. Em modo de desenvolvimento, a conta precisa ser
+              testadora do app.
+            </p>
             {configured ? (
               <Button asChild variant="outline" className="self-start">
                 <a href="/api/instagram/connect">Conectar outra conta do Instagram</a>

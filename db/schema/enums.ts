@@ -12,6 +12,16 @@ export const postStatus = pgEnum("post_status", [
   "pending_approval",
   "approved",
   "changes_requested",
+  "scheduled",
+  "published",
+  "publish_failed",
+]);
+export const publicationStatus = pgEnum("publication_status", [
+  "scheduled",
+  "publishing",
+  "published",
+  "failed",
+  "cancelled",
 ]);
 export const assetKind = pgEnum("asset_kind", ["image", "video"]);
 export const assetStatus = pgEnum("asset_status", ["uploading", "processing", "ready", "failed"]);
@@ -24,4 +34,16 @@ export const approvalRequestStatus = pgEnum("approval_request_status", [
 export const approvalDecisionValue = pgEnum("approval_decision_value", [
   "approved",
   "changes_requested",
+]);
+export const connectionStatus = pgEnum("connection_status", [
+  "active",
+  "expired",
+  "revoked",
+  "not_professional",
+  "missing_scope",
+]);
+export const approvalLinkMode = pgEnum("approval_link_mode", ["shared", "personal"]);
+export const approvalLinkUsedReason = pgEnum("approval_link_used_reason", [
+  "decided",
+  "superseded",
 ]);

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { PhoneFrame } from "@/components/app/PhoneFrame";
 import { StatusPill } from "@/components/feed/StatusPill";
 import { CropEditor } from "@/components/media/CropEditor";
+import { ScheduleSheet, type ScheduleTarget } from "@/components/publishing/ScheduleSheet";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +27,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { archivePost, deletePost } from "@/lib/posts/actions";
 import type { PostDetail } from "@/lib/posts/contracts";
+import { cancelPublication } from "@/lib/publishing/actions";
+import type { LivePublication } from "@/lib/publishing/contracts";
+import { describeSchedule } from "@/lib/publishing/time";
 
 function formatScheduled(d: Date | string): string {
   const date = new Date(d);
@@ -128,11 +132,39 @@ function Caption({ post }: { post: PostDetail }) {
   );
 }
 
-export function PostDetailView({ post }: { post: PostDetail }) {
+export type PostPublishing = {
+  timezone: string;
+  /** The profile has an active connection with the publish scope. */
+  canPublish: boolean;
+  publication: LivePublication | null;
+};
+
+export function PostDetailView({
+  post,
+  publishing,
+}: {
+  post: PostDetail;
+  publishing: PostPublishing;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const { publication } = publishing;
+  const scheduledPub =
+    publication && post.status === "scheduled" && publication.status !== "failed"
+      ? publication
+      : null;
+  const failedPub =
+    publication && post.status === "publish_failed" && publication.status === "failed"
+      ? publication
+      : null;
+  const activePub = scheduledPub ?? failedPub;
+  const scheduleTarget: ScheduleTarget = activePub
+    ? { mode: "reschedule", publicationId: activePub.id, current: activePub.scheduledAt }
+    : { mode: "schedule", postId: post.id };
   const feedHref = `/perfis/${post.profileId}`;
   const video = post.kind === "video" ? post.media[0] : null;
   const archived = post.archivedAt !== null;
@@ -149,6 +181,21 @@ export function PostDetailView({ post }: { post: PostDetail }) {
         toast.success(archived ? "Publicação de volta na grade" : "Publicação arquivada");
         router.refresh();
       } else toast.error(res.message);
+    });
+  }
+
+  function cancelSchedule() {
+    if (!scheduledPub) return;
+    startTransition(async () => {
+      const res = await cancelPublication({ publicationId: scheduledPub.id });
+      if (res.ok) {
+        toast.success("Agendamento cancelado");
+        setConfirmCancel(false);
+        router.refresh();
+      } else {
+        toast.error(res.message);
+        setConfirmCancel(false);
+      }
     });
   }
 
@@ -182,10 +229,48 @@ export function PostDetailView({ post }: { post: PostDetail }) {
             <p className="whitespace-pre-line">{post.lastClientComment}</p>
           </div>
         ) : null}
+        {scheduledPub ? (
+          <div role="status" className="bg-lavanda flex flex-col gap-3 rounded-2xl p-3 text-sm">
+            <p className="text-roxo font-semibold" suppressHydrationWarning>
+              Agendada para {describeSchedule(scheduledPub.scheduledAt, scheduledPub.timezone)}
+            </p>
+            {scheduledPub.status === "publishing" ? (
+              <p>Publicando agora no Instagram…</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => setScheduleOpen(true)}>
+                  Reagendar
+                </Button>
+                <Button variant="outline" onClick={() => setConfirmCancel(true)}>
+                  Cancelar agendamento
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : null}
+        {failedPub ? (
+          <div
+            role="alert"
+            className="bg-destructive/10 text-destructive flex flex-col gap-3 rounded-2xl p-3 text-sm"
+          >
+            <p className="font-semibold">Não foi possível publicar</p>
+            <p>{failedPub.lastError ?? "Não foi possível publicar. Tente novamente."}</p>
+            <Button
+              variant="secondary"
+              className="self-start"
+              onClick={() => setScheduleOpen(true)}
+            >
+              Reagendar
+            </Button>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button asChild>
             <Link href={`/perfis/${post.profileId}/posts/${post.id}/editar`}>Editar</Link>
           </Button>
+          {post.status === "approved" && publishing.canPublish ? (
+            <Button onClick={() => setScheduleOpen(true)}>Agendar</Button>
+          ) : null}
           {canSend ? (
             <Button asChild variant="secondary">
               <Link href={`/perfis/${post.profileId}/aprovacoes/novo?posts=${post.id}`}>
@@ -299,6 +384,37 @@ export function PostDetailView({ post }: { post: PostDetail }) {
           ratio={post.profile.gridRatio}
         />
       ) : null}
+
+      {scheduleOpen ? (
+        <ScheduleSheet
+          open
+          onOpenChange={setScheduleOpen}
+          target={scheduleTarget}
+          profileId={post.profileId}
+          timezone={publishing.timezone}
+          kind={post.kind}
+        />
+      ) : null}
+
+      <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar agendamento?</DialogTitle>
+            <DialogDescription>
+              A publicação não será enviada ao Instagram e volta para Aprovada. Você pode agendar de
+              novo quando quiser.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCancel(false)}>
+              Voltar
+            </Button>
+            <Button variant="destructive" disabled={pending} onClick={cancelSchedule}>
+              Cancelar agendamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>

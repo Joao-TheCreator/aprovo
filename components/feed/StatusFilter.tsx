@@ -11,6 +11,8 @@ const OPTIONS: { value: StatusFilterValue; label: string }[] = [
   { value: "pending_approval", label: "Aguardando" },
   { value: "approved", label: "Aprovada" },
   { value: "changes_requested", label: "Ajustes" },
+  { value: "scheduled", label: "Agendada" },
+  { value: "published", label: "Publicada" },
 ];
 
 export function StatusFilter({

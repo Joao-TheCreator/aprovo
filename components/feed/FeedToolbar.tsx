@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckSquare, Eye, MoreHorizontal, RefreshCw } from "lucide-react";
+import { CalendarClock, CheckSquare, Eye, MoreHorizontal, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -151,6 +151,15 @@ export function FeedToolbar({
       <Chip pressed={clientMode} onClick={() => onClientModeChange(!clientMode)}>
         Modo cliente
       </Chip>
+      {!clientMode ? (
+        <Link
+          href={`/perfis/${profileId}/agendadas`}
+          className="bg-secondary text-secondary-foreground focus-visible:ring-ring/50 inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold outline-none focus-visible:ring-[3px]"
+        >
+          <CalendarClock aria-hidden className="size-4" />
+          Agendadas
+        </Link>
+      ) : null}
       {!clientMode ? (
         <Chip pressed={selecting} onClick={() => onSelectingChange(!selecting)}>
           <CheckSquare aria-hidden className="size-4" />

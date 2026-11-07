@@ -6,4 +6,5 @@ export * from "./profiles";
 export * from "./posts";
 export * from "./approvals";
 export * from "./instagram";
+export * from "./publications";
 export * from "./relations";

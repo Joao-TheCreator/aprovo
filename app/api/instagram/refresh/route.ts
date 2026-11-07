@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { refreshExpiringConnections } from "@/lib/instagram/oauth";
+import { purgeLinkOpens } from "@/lib/approvals/purge";
+import { checkAllConnections, refreshExpiringConnections } from "@/lib/instagram/oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,17 @@ function authorized(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const result = await refreshExpiringConnections();
-  return NextResponse.json(result);
+  const refresh = await refreshExpiringConnections();
+  const health = await checkAllConnections();
+  // Weekly housekeeping (docs/13 §8): approval link opens older than the retention window.
+  let purgedOpens = 0;
+  try {
+    purgedOpens = await purgeLinkOpens();
+  } catch (e) {
+    console.warn(
+      "[approvals] purge of link opens skipped:",
+      e instanceof Error ? e.name : "unknown",
+    );
+  }
+  return NextResponse.json({ ...refresh, ...health, purgedOpens });
 }

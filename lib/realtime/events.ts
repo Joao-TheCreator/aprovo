@@ -12,6 +12,9 @@ export type DecidedPayload = {
   comment: string | null;
   approverName: string | null;
   decidedAt: string;
+  /** Recipient of the personal link (absent in events written before personal links). */
+  recipientName?: string | null;
+  linkUsed?: boolean;
 };
 
 function toRecord(p: DecidedPayload): DecisionRecord {
@@ -40,6 +43,8 @@ export function toLiveEvent(row: {
       postId: d.postId,
       status: d.status,
       decision: toRecord(d),
+      recipientName: d.recipientName ?? null,
+      linkUsed: d.linkUsed ?? false,
       at,
     };
   }

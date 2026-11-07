@@ -75,6 +75,38 @@ Os testes usam `DATABASE_URL_TEST` e truncam as tabelas entre casos.
 Sem `RESEND_API_KEY`, o link mágico não é enviado; para testar a área logada em desenvolvimento,
 insira uma linha em `users` e outra em `sessions` e use o cookie `authjs.session-token`.
 
+## Testes
+
+**Unitários e de integração (Vitest).** Precisam de um Postgres vazio apontado por
+`DATABASE_URL_TEST`; as tabelas são truncadas entre os casos, então nunca use o banco de
+desenvolvimento.
+
+```bash
+DATABASE_URL_TEST=postgres://aprovo:aprovo@localhost:5432/aprovo_test pnpm test
+```
+
+**Ponta a ponta (Playwright, `tests/e2e/`).** Rodam contra o build de produção (`next start`) e um
+Postgres já migrado. Cenários: enviar para aprovação, aprovar pelo link da pessoa, agendar e
+publicar pelo cron com o publicador falso; e conexão expirada, falha e reagendamento. Nada fala com
+a Meta nem com o Resend. Localmente é preciso:
+
+1. Um Postgres com banco de teste migrado (`DATABASE_URL=... pnpm db:migrate`).
+2. Instalar o Chromium uma vez: `pnpm exec playwright install chromium`.
+3. Exportar as variáveis abaixo (o mesmo conjunto do job `e2e` em `.github/workflows/ci.yml`),
+   construir e rodar:
+
+```bash
+export DATABASE_URL=postgres://aprovo:aprovo@localhost:5432/aprovo_test
+export AUTH_SECRET=e2e-auth-secret AUTH_URL=http://localhost:3000 AUTH_TRUST_HOST=true
+export APP_URL=http://localhost:3000 STORAGE_DRIVER=local
+export IG_PUBLISHER=fake IG_PUBLISH_ENABLED=true CRON_SECRET=e2e-secret
+export META_APP_ID=dummy META_APP_SECRET=dummy
+pnpm build && pnpm e2e
+```
+
+`pnpm e2e:ui` abre o modo interativo. Sem `RESEND_API_KEY` os e-mails são ignorados. Os testes
+criam usuários `e2e-*@x.co` (e os recriam a cada execução); use um banco descartável.
+
 ## Como trabalhar neste repositório com Claude Code
 
 Ver [CLAUDE.md](CLAUDE.md): convenções do projeto e a política de uso de modelos (Fable para

@@ -34,6 +34,8 @@ export const posts = pgTable(
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     sentForApprovalAt: timestamp("sent_for_approval_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
+    /** Shortcut to the Instagram media id of the successful publication. */
+    publishedMediaId: text("published_media_id"),
     ...timestamps,
   },
   (t) => [uniqueIndex("posts_profile_position_uniq").on(t.profileId, t.position)],

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { PhoneFrame } from "@/components/app/PhoneFrame";
+import { RecipientsField, newRecipientRow } from "@/components/approvals/RecipientsField";
 import { ShareLinkSheet } from "@/components/approvals/ShareLinkSheet";
 import { StatusPill } from "@/components/feed/StatusPill";
 import { CroppedImage } from "@/components/media/CroppedImage";
@@ -14,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createApprovalRequest } from "@/lib/approvals/actions";
-import { APPROVAL_ERROR_MESSAGES } from "@/lib/approvals/contracts";
+import { APPROVAL_ERROR_MESSAGES, type IssuedLink } from "@/lib/approvals/contracts";
 import { shortCaption } from "@/lib/approvals/ui-format";
 import type { GridCrop, GridRatio, PostStatus } from "@/lib/profiles/contracts";
 import { cn } from "@/lib/utils";
@@ -47,7 +48,9 @@ export function SendForApprovalForm({
   const [message, setMessage] = useState("");
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [issued, setIssued] = useState<string | null>(null);
+  const [recipients, setRecipients] = useState(() => [newRecipientRow()]);
+  const [shared, setShared] = useState(false);
+  const [issued, setIssued] = useState<IssuedLink[] | null>(null);
 
   const listHref = `/perfis/${profileId}/aprovacoes`;
   const aspect = ratio === "3:4" ? "aspect-[3/4]" : "aspect-square";
@@ -68,15 +71,26 @@ export function SendForApprovalForm({
       setError("Selecione ao menos uma publicação.");
       return;
     }
+    const named = recipients
+      .map((r) => ({ name: r.name.trim(), contact: r.contact.trim() }))
+      .filter((r) => r.name || r.contact);
+    if (!shared && (named.length === 0 || named.some((r) => !r.name))) {
+      setError("Informe o nome de quem vai aprovar.");
+      return;
+    }
     startTransition(async () => {
       const res = await createApprovalRequest({
         profileId,
         postIds: candidates.filter((c) => selected.has(c.id)).map((c) => c.id),
         title: title.trim() || undefined,
         message: message.trim() || undefined,
-        label: label.trim() || undefined,
+        label: shared ? label.trim() || undefined : undefined,
+        mode: shared ? "shared" : "personal",
+        recipients: shared
+          ? []
+          : named.map((r) => ({ name: r.name, contact: r.contact || undefined })),
       });
-      if (res.ok) setIssued(res.data.url);
+      if (res.ok) setIssued(res.data.links);
       else setError(APPROVAL_ERROR_MESSAGES[res.code] ?? res.message);
     });
   }
@@ -110,7 +124,7 @@ export function SendForApprovalForm({
                   <li key={c.id}>
                     <label
                       className={cn(
-                        "bg-card flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border p-2 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50",
+                        "bg-card has-[:focus-visible]:ring-ring/50 flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border p-2 has-[:focus-visible]:ring-[3px]",
                         checked ? "border-roxo" : "border-border",
                       )}
                     >
@@ -173,20 +187,39 @@ export function SendForApprovalForm({
             onChange={(e) => setMessage(e.target.value)}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="ap-label">Nome do link</Label>
-          <Input
-            id="ap-label"
-            value={label}
-            maxLength={80}
-            placeholder="WhatsApp do Carlos"
-            onChange={(e) => setLabel(e.target.value)}
-            aria-describedby="ap-label-help"
+        <label className="bg-card border-border has-[:focus-visible]:ring-ring/50 flex min-h-11 cursor-pointer items-start gap-3 rounded-2xl border p-3 text-sm has-[:focus-visible]:ring-[3px]">
+          <input
+            type="checkbox"
+            checked={shared}
+            onChange={(e) => setShared(e.target.checked)}
+            className="mt-0.5 size-5 shrink-0"
           />
-          <p id="ap-label-help" className="text-muted-foreground text-xs">
-            Só você vê este nome. Ajuda a saber quem abriu cada link.
-          </p>
-        </div>
+          <span className="flex flex-col gap-0.5">
+            <span className="font-semibold">Link aberto (para grupos)</span>
+            <span className="text-muted-foreground text-xs">
+              Um único link que qualquer pessoa com ele pode usar. Não se encerra ao decidir.
+            </span>
+          </span>
+        </label>
+
+        {shared ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ap-label">Nome do link</Label>
+            <Input
+              id="ap-label"
+              value={label}
+              maxLength={80}
+              placeholder="Grupo do cliente"
+              onChange={(e) => setLabel(e.target.value)}
+              aria-describedby="ap-label-help"
+            />
+            <p id="ap-label-help" className="text-muted-foreground text-xs">
+              Só você vê este nome. Ajuda a saber quem abriu o link.
+            </p>
+          </div>
+        ) : (
+          <RecipientsField rows={recipients} onChange={setRecipients} idPrefix="ap-rcpt" />
+        )}
 
         {error ? (
           <p role="alert" className="text-destructive text-sm font-semibold">
@@ -196,7 +229,7 @@ export function SendForApprovalForm({
 
         <Button type="submit" size="lg" disabled={pending || candidates.length === 0}>
           {pending ? <Loader2 aria-hidden className="animate-spin" /> : null}
-          Gerar link
+          {!shared && recipients.length > 1 ? "Gerar links" : "Gerar link"}
         </Button>
       </form>
 
@@ -206,7 +239,7 @@ export function SendForApprovalForm({
           onOpenChange={(o) => {
             if (!o) router.push(listHref);
           }}
-          url={issued}
+          links={issued}
           message={message}
           profileId={profileId}
         />

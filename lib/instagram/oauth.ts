@@ -13,6 +13,8 @@ import {
   type InstagramConnection,
 } from "@/db/schema";
 import { decrypt, encrypt } from "@/lib/crypto/secretbox";
+import { handleConnectionLoss } from "@/lib/publishing/connection-loss";
+import { classifyGraphError, stripTokens } from "./errors";
 
 export const IG_AUTHORIZE_URL = "https://www.instagram.com/oauth/authorize";
 export const IG_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
@@ -20,7 +22,18 @@ export const IG_GRAPH_HOST = "https://graph.instagram.com";
 export const IG_LONG_LIVED_URL = `${IG_GRAPH_HOST}/access_token`;
 export const IG_REFRESH_URL = `${IG_GRAPH_HOST}/refresh_access_token`;
 export const IG_ME_URL = `${IG_GRAPH_HOST}/v21.0/me`;
-export const SCOPES = ["instagram_business_basic"] as const;
+export const BASIC_SCOPE = "instagram_business_basic";
+export const PUBLISH_SCOPE = "instagram_business_content_publish";
+
+/** Scopes requested with Instagram Login. The publish scope is only asked for behind IG_PUBLISH_ENABLED. */
+export function instagramScopes(): readonly string[] {
+  return process.env.IG_PUBLISH_ENABLED === "true" ? [BASIC_SCOPE, PUBLISH_SCOPE] : [BASIC_SCOPE];
+}
+
+/** True when the connection was granted the content publish scope. */
+export function canPublish(connection: Pick<InstagramConnection, "scopes">): boolean {
+  return connection.scopes.includes(PUBLISH_SCOPE);
+}
 export const FB_AUTHORIZE_URL = "https://www.facebook.com/v21.0/dialog/oauth";
 export const FB_GRAPH_HOST = "https://graph.facebook.com";
 export const FB_TOKEN_URL = `${FB_GRAPH_HOST}/v21.0/oauth/access_token`;
@@ -76,7 +89,7 @@ export function buildAuthorizeUrl(state: string): string {
   url.searchParams.set("client_id", process.env.META_APP_ID ?? "");
   url.searchParams.set("redirect_uri", getRedirectUri());
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", SCOPES.join(","));
+  url.searchParams.set("scope", instagramScopes().join(","));
   url.searchParams.set("state", state);
   return url.toString();
 }
@@ -219,7 +232,7 @@ export async function exchangeCode(code: string, fetchImpl: typeof fetch = fetch
   const permissions =
     typeof short.permissions === "string"
       ? short.permissions.split(",").map((s) => s.trim())
-      : (short.permissions ?? [...SCOPES]);
+      : (short.permissions ?? [...instagramScopes()]);
   // Prefer the string ids from /me: numeric JSON ids can lose precision.
   const igUserId = String(me.user_id ?? me.id ?? short.user_id ?? "");
   if (!igUserId) throw new OAuthError("exchange_failed", "me: missing user id");
@@ -321,6 +334,10 @@ export async function completeOAuth(
     scopes: r.scopes,
     connectedBy: input.userId,
     lastRefreshedAt: new Date(),
+    // A fresh authorization always yields a healthy connection.
+    status: "active" as const,
+    statusDetail: null,
+    statusCheckedAt: new Date(),
   };
   const [row] = await db
     .insert(instagramConnections)
@@ -393,6 +410,9 @@ export async function refreshIfNeeded(
         accessTokenEnc: encrypt(token),
         tokenExpiresAt: expiresAt,
         lastRefreshedAt: new Date(),
+        status: "active",
+        statusDetail: null,
+        statusCheckedAt: new Date(),
       })
       .where(eq(instagramConnections.id, connection.id))
       .returning();
@@ -433,4 +453,122 @@ export async function refreshExpiringConnections(fetchImpl: typeof fetch = fetch
     }
   }
   return { due: due.length, refreshed, failed };
+}
+
+// ---- Health check ----------------------------------------------------------------
+
+const healthSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  username: z.string().optional(),
+  account_type: z.string().optional(),
+});
+
+/**
+ * Verifies one connection against Meta (weekly cron) and stores the result in status,
+ * status_detail and status_checked_at. Transient failures (rate limit, network, unknown) keep the
+ * previous status. Revoked connections stay revoked until the user reconnects. Never throws on
+ * Meta failures and never stores or logs tokens.
+ */
+export async function checkConnectionHealth(
+  connection: InstagramConnection,
+  fetchImpl: typeof fetch = fetch,
+): Promise<InstagramConnection> {
+  if (connection.status === "revoked") return connection;
+  const save = async (patch: Partial<typeof instagramConnections.$inferInsert>) => {
+    const [row] = await db
+      .update(instagramConnections)
+      .set({ ...patch, statusCheckedAt: new Date() })
+      .where(eq(instagramConnections.id, connection.id))
+      .returning();
+    return row ?? connection;
+  };
+  /** Saves a non-active status and fails the scheduled publications of the connection at once. */
+  const saveLost = async (patch: Partial<typeof instagramConnections.$inferInsert>) => {
+    const row = await save(patch);
+    await handleConnectionLoss(row, "system:health");
+    return row;
+  };
+
+  // Expired by date: no need to ask Meta.
+  if (connection.tokenExpiresAt.getTime() < Date.now()) {
+    return saveLost({ status: "expired", statusDetail: "Token expirado" });
+  }
+
+  const url =
+    connection.provider === "facebook"
+      ? new URL(`${FB_GRAPH_HOST}/v21.0/${connection.igUserId}`)
+      : new URL(IG_ME_URL);
+  url.searchParams.set(
+    "fields",
+    connection.provider === "facebook" ? "id,username" : "id,username,account_type",
+  );
+  url.searchParams.set("access_token", decryptToken(connection));
+
+  let status = 0;
+  let body: unknown = null;
+  try {
+    const res = await fetchImpl(url, { signal: AbortSignal.timeout(15000), cache: "no-store" });
+    status = res.status;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    if (res.ok) {
+      const me = healthSchema.safeParse(body);
+      const patch: Partial<typeof instagramConnections.$inferInsert> = {
+        status: "active",
+        statusDetail: null,
+      };
+      if (me.success) {
+        if (me.data.username && me.data.username !== connection.username) {
+          patch.username = me.data.username;
+        }
+        if (me.data.account_type && me.data.account_type !== connection.accountType) {
+          patch.accountType = me.data.account_type;
+        }
+      }
+      return save(patch);
+    }
+  } catch {
+    status = 0; // network failure or timeout
+  }
+
+  const err = classifyGraphError(status, body);
+  const detail = stripTokens(err.message);
+  switch (err.code) {
+    case "token_expired":
+      return saveLost({ status: "expired", statusDetail: detail });
+    case "missing_scope":
+      return saveLost({ status: "missing_scope", statusDetail: detail });
+    case "not_professional":
+      return saveLost({ status: "not_professional", statusDetail: detail });
+    default:
+      // rate_limited / network / unknown: keep the previous status.
+      return save({ statusDetail: detail });
+  }
+}
+
+/** Runs the health check for every connection (system-level: the cron route is secret-protected). */
+export async function checkAllConnections(fetchImpl: typeof fetch = fetch) {
+  const all = await db.select().from(instagramConnections);
+  let checked = 0;
+  let unhealthy = 0;
+  for (const c of all) {
+    if (c.status === "revoked") {
+      unhealthy++; // stays revoked until the user reconnects; Meta is not called
+      continue;
+    }
+    try {
+      const next = await checkConnectionHealth(c, fetchImpl);
+      checked++;
+      if (next.status !== "active") unhealthy++;
+    } catch (e) {
+      console.error(
+        `[instagram] health check error connection=${c.id}:`,
+        e instanceof Error ? e.name : "unknown",
+      );
+    }
+  }
+  return { checked, unhealthy };
 }

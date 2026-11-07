@@ -10,6 +10,7 @@ import {
   statesMatch,
 } from "@/lib/instagram/oauth";
 import { createProfileAndImport } from "@/lib/profiles/from-connection";
+import { countRescheduleableFailures } from "@/lib/publishing/connection-loss";
 
 export const dynamic = "force-dynamic";
 
@@ -57,15 +58,26 @@ export async function GET(req: NextRequest) {
     return back("error=exchange_failed");
   }
 
+  // Publications that failed because the connection was lost can be rescheduled in one tap.
+  let failedParam = "";
+  try {
+    const failed = (await countRescheduleableFailures([connection.id])).get(connection.id) ?? 0;
+    if (failed > 0) failedParam = `&failed=${failed}`;
+  } catch {
+    failedParam = "";
+  }
+
   // ADR-009: every connected account becomes a profile, imported with its own token.
   try {
     const { profileId } = await createProfileAndImport(connection);
-    const res = NextResponse.redirect(new URL(`/perfis/${profileId}?connected=1`, req.url));
+    const res = NextResponse.redirect(
+      new URL(`/perfis/${profileId}?connected=1${failedParam}`, req.url),
+    );
     res.cookies.delete(STATE_COOKIE);
     res.cookies.delete(PROVIDER_COOKIE);
     return res;
   } catch (e) {
     console.error("[instagram] profile creation failed:", e instanceof Error ? e.name : "unknown");
-    return back("connected=1");
+    return back(`connected=1${failedParam}`);
   }
 }

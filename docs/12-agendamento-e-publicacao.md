@@ -247,8 +247,9 @@ agendador a cada minuto não. Três caminhos:
 **Recomendação:** começar com **B** (Cloudflare Worker de 10 linhas, `fetch` com o header
 `x-cron-secret`, que a rota de refresh já aceita) a cada **1 minuto**, e migrar para **A** quando
 o APROVO começar a cobrar (R10 obriga de qualquer forma). O `vercel.json` ganha a mesma rota
-com `schedule: "0 * * * *"` (uma vez por hora no Hobby, ou a cada minuto no Pro) como rede de
-segurança; a rota é idempotente, então dois disparadores não causam publicação dupla.
+com `schedule: "30 3 * * *"` (o Hobby **recusa o deploy** com cron mais frequente que uma vez por
+dia, confirmado em 07/11/2026; no Pro pode ser a cada minuto) como rede de segurança; a rota é
+idempotente, então dois disparadores não causam publicação dupla.
 **Decisão do João: pendente** (pergunta 1 da seção 9).
 
 ### 5.2 A rota `GET /api/publishing/run`

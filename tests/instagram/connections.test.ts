@@ -161,22 +161,43 @@ describe("refresh route", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     // The first refresh call fails, the second succeeds: both connections must be attempted.
+    // Health checks (GET /v21.0/<ig user id>) answer ok and are not counted.
     let n = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        ++n === 1
+      vi.fn(async (input: URL | string | Request) => {
+        const url = new URL(
+          typeof input === "string" ? input : input instanceof URL ? input : input.url,
+        );
+        if (url.pathname !== "/v21.0/oauth/access_token") {
+          return json({ id: url.pathname.split("/").pop(), username: "conta" });
+        }
+        return ++n === 1
           ? json({ error: { message: "boom" } }, 400)
-          : json({ access_token: "FBREFRESHED", expires_in: 5184000 }),
-      ),
+          : json({ access_token: "FBREFRESHED", expires_in: 5184000 });
+      }),
     );
     const res = await call();
-    expect(await res.json()).toEqual({ due: 2, refreshed: 1, failed: 1 });
+    expect(await res.json()).toEqual({
+      due: 2,
+      refreshed: 1,
+      failed: 1,
+      checked: 2,
+      unhealthy: 0,
+      purgedOpens: 0,
+    });
     expect(n).toBe(2);
 
     n = 1; // all succeed now
     const res2 = await call();
-    expect(await res2.json()).toEqual({ due: 1, refreshed: 1, failed: 0 });
+    expect(await res2.json()).toEqual({
+      due: 1,
+      refreshed: 1,
+      failed: 0,
+      checked: 2,
+      unhealthy: 0,
+      purgedOpens: 0,
+    });
     const rows = await listConnections(s.ws.id);
     expect(rows.every((r) => decrypt(r.accessTokenEnc) === "FBREFRESHED")).toBe(true);
   });

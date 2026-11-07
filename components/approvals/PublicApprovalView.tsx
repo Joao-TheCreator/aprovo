@@ -1,6 +1,7 @@
 "use client";
 
 import { Bookmark, Heart, MessageCircle, MoreHorizontal, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Logo } from "@/components/app/Logo";
@@ -21,11 +22,16 @@ import {
 import {
   APPROVAL_ERROR_MESSAGES,
   type DecideInput,
+  type DecideManyInput,
+  type DecideManyResult,
   type DecideResult,
   type DecisionRecord,
   type PublicApprovalView as PublicApprovalData,
 } from "@/lib/approvals/contracts";
 import { formatDateTimeBr } from "@/lib/approvals/ui-format";
+
+/** Codes of the 410 family: the link stopped accepting decisions while the page was open. */
+const GONE_CODES = new Set(["link_used", "link_expired", "link_revoked"]);
 
 const NAME_KEY = "aprovo_approver_name";
 
@@ -34,6 +40,10 @@ type Item = PublicApprovalData["items"][number];
 
 export function PublicApprovalView({ token, data }: Props) {
   const { request, profile, items, feedItems } = data;
+  const router = useRouter();
+  const personal = data.mode === "personal";
+  const [closed, setClosed] = useState(false);
+  const readOnly = data.readOnly || closed;
   const [decisions, setDecisions] = useState<Record<string, DecisionRecord>>(() =>
     Object.fromEntries(items.flatMap((i) => (i.decision ? [[i.postId, i.decision]] : []))),
   );
@@ -41,6 +51,7 @@ export function PublicApprovalView({ token, data }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [name, setName] = useState("");
   const [confirmAll, setConfirmAll] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
@@ -64,9 +75,17 @@ export function PublicApprovalView({ token, data }: Props) {
   }
 
   const highlightIds = useMemo(() => new Set(items.map((i) => i.postId)), [items]);
+  // A personal link decides each item on its own, even when another recipient already moved the post.
+  const canDecide = useCallback(
+    (i: Item) =>
+      personal
+        ? ["pending_approval", "approved", "changes_requested"].includes(i.status)
+        : i.status === "pending_approval",
+    [personal],
+  );
   const isPending = useCallback(
-    (i: Item) => !decisions[i.postId] && i.status === "pending_approval",
-    [decisions],
+    (i: Item) => !decisions[i.postId] && canDecide(i),
+    [decisions, canDecide],
   );
   const pendingItems = items.filter(isPending);
 
@@ -83,7 +102,7 @@ export function PublicApprovalView({ token, data }: Props) {
           postId,
           decision,
           comment: comment || undefined,
-          approverName: name.trim() || undefined,
+          approverName: personal ? undefined : name.trim() || undefined,
         };
         const res = await fetch(`/api/approval/${token}/decide`, {
           method: "POST",
@@ -96,7 +115,14 @@ export function PublicApprovalView({ token, data }: Props) {
             ...cur,
             [postId]: { ...json.data.decision, decidedAt: new Date(json.data.decision.decidedAt) },
           }));
+          if (json.data.linkUsed) setClosed(true);
           return true;
+        }
+        if (GONE_CODES.has(json.code)) {
+          // Show the receipt (or the inactive card) without a manual reload.
+          if (json.code === "link_used") setClosed(true);
+          router.refresh();
+          return false;
         }
         const message = APPROVAL_ERROR_MESSAGES[json.code] ?? json.message;
         setErrors((cur) => ({ ...cur, [postId]: message }));
@@ -111,21 +137,49 @@ export function PublicApprovalView({ token, data }: Props) {
         setBusyId(null);
       }
     },
-    [name, token],
+    [name, token, personal, router],
   );
 
   async function approveAll() {
     setConfirmAll(false);
     const targets = pendingItems;
+    setBulkError(null);
     setProgress({ done: 0, total: targets.length });
-    let done = 0;
-    for (const item of targets) {
-      const ok = await decide(item.postId, "approved", "");
-      if (!ok) break;
-      done += 1;
-      setProgress({ done, total: targets.length });
+    setBusyId("all");
+    try {
+      const body: DecideManyInput = {
+        decisions: targets.map((t) => ({ postId: t.postId, decision: "approved" as const })),
+        approverName: personal ? undefined : name.trim() || undefined,
+      };
+      const res = await fetch(`/api/approval/${token}/decide-all`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as DecideManyResult;
+      if (json.ok) {
+        setDecisions((cur) => ({
+          ...cur,
+          ...Object.fromEntries(
+            json.data.results.map((r) => [
+              r.postId,
+              { ...r.decision, decidedAt: new Date(r.decision.decidedAt) },
+            ]),
+          ),
+        }));
+        if (json.data.linkUsed) setClosed(true);
+      } else if (GONE_CODES.has(json.code)) {
+        if (json.code === "link_used") setClosed(true);
+        router.refresh();
+      } else {
+        setBulkError(APPROVAL_ERROR_MESSAGES[json.code] ?? json.message);
+      }
+    } catch {
+      setBulkError("Não foi possível enviar. Verifique sua conexão e tente de novo.");
+    } finally {
+      setBusyId(null);
+      setProgress(null);
     }
-    setProgress(null);
   }
 
   function scrollTo(postId: string) {
@@ -161,17 +215,33 @@ export function PublicApprovalView({ token, data }: Props) {
     <main className="mx-auto flex w-full max-w-[430px] flex-1 flex-col gap-5 px-4 py-5">
       <header className="flex flex-col gap-3">
         <Logo height={32} />
-        <h1 className="text-xl leading-7 font-bold">
-          {request.senderName} enviou {count} {count === 1 ? "publicação" : "publicações"} para sua
-          aprovação
-        </h1>
+        {readOnly ? (
+          <>
+            <h1 className="text-xl leading-7 font-bold">Aprovação registrada</h1>
+            {closed && !data.readOnly ? (
+              <p role="status" className="bg-verde text-ink rounded-2xl p-3 text-sm font-semibold">
+                Tudo decidido. Este link foi encerrado.
+              </p>
+            ) : null}
+            <p className="text-muted-foreground text-sm">
+              {data.recipientName ? `${data.recipientName}, esta ` : "Esta "}é a sua decisão sobre{" "}
+              {count === 1 ? "a publicação enviada" : `as ${count} publicações enviadas`} por{" "}
+              {request.senderName}.
+            </p>
+          </>
+        ) : (
+          <h1 className="text-xl leading-7 font-bold">
+            {request.senderName} enviou {count} {count === 1 ? "publicação" : "publicações"} para
+            sua aprovação
+          </h1>
+        )}
         {request.title ? <p className="text-muted-foreground text-sm">{request.title}</p> : null}
         {request.message ? (
           <p className="bg-lavanda rounded-2xl p-3 text-[15px] whitespace-pre-line">
             {request.message}
           </p>
         ) : null}
-        {pendingItems.length > 1 ? (
+        {!readOnly && pendingItems.length > 1 ? (
           <div className="flex flex-col gap-1">
             <Button
               variant="success"
@@ -183,7 +253,12 @@ export function PublicApprovalView({ token, data }: Props) {
             </Button>
             {progress ? (
               <p role="status" className="text-sm">
-                Aprovando {Math.min(progress.done + 1, progress.total)} de {progress.total}…
+                Aprovando {progress.total} publicações…
+              </p>
+            ) : null}
+            {bulkError ? (
+              <p role="alert" className="text-destructive text-sm font-semibold">
+                {bulkError}
               </p>
             ) : null}
           </div>
@@ -207,7 +282,7 @@ export function PublicApprovalView({ token, data }: Props) {
         {items.map((item, idx) => {
           const decision = decisions[item.postId] ?? null;
           const lockedNote =
-            !decision && item.status !== "pending_approval"
+            !decision && !canDecide(item)
               ? "Esta publicação não está aguardando decisão neste momento."
               : null;
           return (
@@ -260,12 +335,15 @@ export function PublicApprovalView({ token, data }: Props) {
               </div>
 
               <div className="mt-3 flex flex-col gap-3 border-t border-neutral-200 px-3 pt-3 font-sans">
-                {!decision && item.status === "pending_approval" ? (
+                {!readOnly && !decision && item.status === "pending_approval" ? (
                   <StatusPill status="pending_approval" className="self-start" />
                 ) : null}
                 <ApprovalBar
                   decision={decision}
                   lockedNote={lockedNote}
+                  readOnly={readOnly}
+                  mode={data.mode}
+                  recipientName={data.recipientName}
                   approverName={name}
                   onApproverNameChange={changeName}
                   busy={busyId === item.postId}
@@ -278,13 +356,24 @@ export function PublicApprovalView({ token, data }: Props) {
         })}
       </section>
 
+      {readOnly ? (
+        <footer className="text-muted-foreground text-center text-sm">
+          Para uma nova aprovação, peça um link novo ao seu social media.
+        </footer>
+      ) : null}
+
       <Dialog open={confirmAll} onOpenChange={setConfirmAll}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Aprovar todas?</DialogTitle>
             <DialogDescription>
               As {pendingItems.length} publicações pendentes serão aprovadas
-              {name.trim() ? ` em nome de ${name.trim()}` : ""}.
+              {personal && data.recipientName
+                ? ` em nome de ${data.recipientName}`
+                : name.trim()
+                  ? ` em nome de ${name.trim()}`
+                  : ""}
+              .
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

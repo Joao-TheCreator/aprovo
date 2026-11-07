@@ -1,6 +1,7 @@
 import { FACEBOOK_GRAPH_HOST, GraphBusinessDiscoveryProvider, INSTAGRAM_GRAPH_HOST } from "./graph";
 import { decryptToken, getConnectionById, listConnections, refreshIfNeeded } from "./oauth";
 import type { InstagramConnection } from "@/db/schema";
+import { ACCOUNT_DISCONNECTED_MESSAGE } from "@/lib/profiles/contracts";
 import type { IgError, IgMediaPage, IgProfile, InstagramProvider } from "./types";
 
 export * from "./types";
@@ -11,6 +12,16 @@ class NotConfiguredProvider implements InstagramProvider {
   }
   async fetchMedia(): Promise<IgMediaPage | IgError> {
     return { code: "not_configured" };
+  }
+}
+
+/** Returned for a linked connection whose token is dead: nothing may import with it. */
+class DisconnectedProvider implements InstagramProvider {
+  async fetchProfile(): Promise<IgProfile | IgError> {
+    return { code: "provider_down", message: ACCOUNT_DISCONNECTED_MESSAGE };
+  }
+  async fetchMedia(): Promise<IgMediaPage | IgError> {
+    return { code: "provider_down", message: ACCOUNT_DISCONNECTED_MESSAGE };
   }
 }
 
@@ -46,7 +57,10 @@ export function getInstagramProvider(): InstagramProvider {
 export async function getInstagramProviderForConnection(
   stored: InstagramConnection | null,
 ): Promise<InstagramProvider> {
-  if (stored) {
+  // IG_PUBLISHER=fake (e2e/local without Meta): never call the Graph API with a stand-in token.
+  if (process.env.IG_PUBLISHER === "fake") return new NotConfiguredProvider();
+  // A connection that is not active (expired, revoked, ...) has a dead token: never call Meta with it.
+  if (stored && stored.status === "active") {
     try {
       const connection = await refreshIfNeeded(stored);
       return new GraphBusinessDiscoveryProvider({
@@ -76,7 +90,11 @@ export async function getInstagramProviderForProfile(profile: {
 }): Promise<InstagramProvider> {
   if (profile.connectionId) {
     const linked = await getConnectionById(profile.connectionId, profile.workspaceId);
-    if (linked) return getInstagramProviderForConnection(linked);
+    if (linked) {
+      return linked.status === "active"
+        ? getInstagramProviderForConnection(linked)
+        : new DisconnectedProvider();
+    }
   }
   const connections = await listConnections(profile.workspaceId);
   const wanted = profile.igUsername.toLowerCase();

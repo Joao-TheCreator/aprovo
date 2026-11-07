@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { activityLog, mediaAssets, postMedia, posts } from "@/db/schema";
+import { activityLog, mediaAssets, postMedia, posts, publications } from "@/db/schema";
 import { testDb } from "../setup";
 import { makeRequireMock, seedWorkspace } from "../media/helpers";
 
@@ -168,6 +168,77 @@ describe("posts actions", () => {
     expect(await events(profile.id)).toEqual(
       expect.arrayContaining(["post.archived", "post.unarchived", "post.deleted"]),
     );
+  });
+
+  it("editing a scheduled post cancels its publication and returns it to draft", async () => {
+    const { profile, user, mk } = await seed();
+    const a = await mk();
+    const r = await createPost({ profileId: profile.id, kind: "post", assetIds: [a] });
+    if (!r.ok) throw new Error("x");
+    const postId = r.data.postId;
+    const at = new Date(Date.now() + 3_600_000);
+    await testDb
+      .update(posts)
+      .set({ status: "scheduled", approvedAt: new Date() })
+      .where(eq(posts.id, postId));
+    const [pub] = await testDb
+      .insert(publications)
+      .values({ postId, profileId: profile.id, scheduledAt: at, nextAttemptAt: at })
+      .returning();
+
+    expect((await updatePost({ postId, caption: "Outra legenda" })).ok).toBe(true);
+    const [p] = await testDb.select().from(posts).where(eq(posts.id, postId));
+    expect(p.status).toBe("draft");
+    expect(p.approvedAt).toBeNull();
+    const [after] = await testDb.select().from(publications).where(eq(publications.id, pub.id));
+    expect(after.status).toBe("cancelled");
+    expect(after.cancelledAt).not.toBeNull();
+    expect(after.cancelledBy).toBe(user.id);
+    const ev = await events(profile.id);
+    expect(ev).toContain("publication.cancelled");
+    expect(ev).toContain("post.updated");
+    const logs = await testDb
+      .select()
+      .from(activityLog)
+      .where(eq(activityLog.profileId, profile.id));
+    expect(logs.find((l) => l.event === "publication.cancelled")?.payload).toMatchObject({
+      reason: "edited",
+    });
+
+    // media edit on a scheduled post behaves the same
+    await testDb.update(posts).set({ status: "scheduled" }).where(eq(posts.id, postId));
+    await testDb
+      .update(publications)
+      .set({ status: "scheduled" })
+      .where(eq(publications.id, pub.id));
+    expect((await updatePostMedia({ postId, items: [{ assetId: await mk() }] })).ok).toBe(true);
+    expect((await testDb.select().from(posts).where(eq(posts.id, postId)))[0].status).toBe("draft");
+    expect(
+      (await testDb.select().from(publications).where(eq(publications.id, pub.id)))[0].status,
+    ).toBe("cancelled");
+  });
+
+  it("refuses to edit, archive or delete a published post", async () => {
+    const { profile, mk } = await seed();
+    const r = await createPost({ profileId: profile.id, kind: "post", assetIds: [await mk()] });
+    if (!r.ok) throw new Error("x");
+    const postId = r.data.postId;
+    await testDb.update(posts).set({ status: "published" }).where(eq(posts.id, postId));
+    const locked = {
+      ok: false,
+      code: "published_locked",
+      message: "Publicações já publicadas no Instagram não podem ser alteradas.",
+    };
+    expect(await updatePost({ postId, caption: "x" })).toMatchObject(locked);
+    expect(await updatePostMedia({ postId, items: [{ assetId: await mk() }] })).toMatchObject(
+      locked,
+    );
+    expect(await archivePost(postId, true)).toMatchObject(locked);
+    expect(await deletePost(postId)).toMatchObject(locked);
+    const [p] = await testDb.select().from(posts).where(eq(posts.id, postId));
+    expect(p.status).toBe("published");
+    expect(p.caption).toBeNull();
+    expect(p.archivedAt).toBeNull();
   });
 
   it("returns not_found / null for non-members", async () => {

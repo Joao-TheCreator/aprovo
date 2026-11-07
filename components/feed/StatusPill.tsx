@@ -1,14 +1,27 @@
-import { Check, Clock, MessageCircle, Pencil, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCheck,
+  Clock,
+  MessageCircle,
+  Pencil,
+  Send,
+  type LucideIcon,
+} from "lucide-react";
 
+import type { PostStatus } from "@/lib/profiles/contracts";
 import { cn } from "@/lib/utils";
 
-export type PostStatus = "draft" | "pending_approval" | "approved" | "changes_requested";
+export type { PostStatus };
 
 export const STATUS_LABELS: Record<PostStatus, string> = {
   draft: "Rascunho",
   pending_approval: "Aguardando aprovação",
   approved: "Aprovada",
   changes_requested: "Ajustes solicitados",
+  scheduled: "Agendada",
+  published: "Publicada",
+  publish_failed: "Falhou",
 };
 
 const STATUS_STYLES: Record<PostStatus, { icon: LucideIcon; className: string }> = {
@@ -16,6 +29,9 @@ const STATUS_STYLES: Record<PostStatus, { icon: LucideIcon; className: string }>
   pending_approval: { icon: Clock, className: "bg-roxo-apoio text-white" },
   approved: { icon: Check, className: "bg-verde text-ink" },
   changes_requested: { icon: MessageCircle, className: "bg-lavanda text-roxo" },
+  scheduled: { icon: Send, className: "bg-roxo text-white" },
+  published: { icon: CheckCheck, className: "bg-ink-2 text-white" },
+  publish_failed: { icon: AlertTriangle, className: "bg-destructive text-white" },
 };
 
 export function StatusPill({ status, className }: { status: PostStatus; className?: string }) {

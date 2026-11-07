@@ -15,6 +15,8 @@ export const mediaAssets = pgTable(
     previewPath: text("preview_path"),
     thumbPath: text("thumb_path"),
     posterPath: text("poster_path"),
+    /** JPEG derivative for Instagram publishing (prefix publish/). */
+    publishPath: text("publish_path"),
     width: integer("width"),
     height: integer("height"),
     durationMs: integer("duration_ms"),

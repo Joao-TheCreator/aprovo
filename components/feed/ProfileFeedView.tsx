@@ -20,6 +20,18 @@ import { refreshProfile } from "@/lib/profiles/actions";
 import { bulkArchivePosts, bulkDeletePosts, reorderPosts } from "@/lib/posts/actions";
 import { applyOrder } from "@/lib/posts/reorder";
 
+/** Message of the banner shown while the linked Instagram connection is not active (docs/12 section 7). */
+function connectionBannerText(status: string, username: string): string {
+  switch (status) {
+    case "missing_scope":
+      return "Reconecte e autorize 'Publicar conteúdo'.";
+    case "not_professional":
+      return `A conta @${username} deixou de ser profissional. Mude para Criador ou Empresa e reconecte.`;
+    default:
+      return `O Instagram @${username} desconectou. Reconecte para continuar publicando.`;
+  }
+}
+
 export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
   const { profile, items: serverItems, canRefresh } = feed;
   const router = useRouter();
@@ -58,6 +70,9 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
       pending_approval: 0,
       approved: 0,
       changes_requested: 0,
+      scheduled: 0,
+      published: 0,
+      publish_failed: 0,
     };
     for (const i of items) {
       if (i.kind !== "planned") continue;
@@ -177,6 +192,17 @@ export function ProfileFeedView({ feed }: { feed: ProfileFeed }) {
               Configurações
             </Link>
             .
+          </p>
+        </PhoneFrame>
+      ) : null}
+
+      {profile.connectionStatus && profile.connectionStatus !== "active" ? (
+        <PhoneFrame>
+          <p role="status" className="bg-lavanda rounded-2xl px-4 py-3 text-sm">
+            {connectionBannerText(profile.connectionStatus, profile.igUsername)}{" "}
+            <Link href="/configuracoes" className="font-semibold underline">
+              Abrir Configurações
+            </Link>
           </p>
         </PhoneFrame>
       ) : null}
