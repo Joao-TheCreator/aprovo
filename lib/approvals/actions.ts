@@ -18,8 +18,12 @@ import {
   APPROVAL_ERROR_MESSAGES,
   LINK_TTL_DAYS,
   createApprovalRequestSchema,
+  issuePersonalLinkSchema,
+  type ApprovalLinkMode,
   type CreateApprovalRequestInput,
   type CreateApprovalRequestResult,
+  type IssuedLink,
+  type RecipientInput,
 } from "./contracts";
 import { hashToken, issueToken } from "./token";
 
@@ -55,23 +59,54 @@ function baseUrl(): string {
   return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 }
 
-function newLinkValues(requestId: string, label: string | null | undefined) {
+type NewLinkSpec = {
+  mode: ApprovalLinkMode;
+  recipientName?: string | null;
+  recipientContact?: string | null;
+  label?: string | null;
+};
+
+function newLinkValues(requestId: string, spec: NewLinkSpec) {
   const token = issueToken();
   const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 86_400_000);
   return {
     token,
     expiresAt,
-    values: { requestId, tokenHash: hashToken(token), label: label || null, expiresAt },
+    mode: spec.mode,
+    recipientName: spec.mode === "personal" ? spec.recipientName || null : null,
+    values: {
+      requestId,
+      tokenHash: hashToken(token),
+      mode: spec.mode,
+      label: spec.label || null,
+      recipientName: spec.mode === "personal" ? spec.recipientName || null : null,
+      recipientContact: spec.mode === "personal" ? spec.recipientContact || null : null,
+      expiresAt,
+    },
   };
 }
 
-/** Sends posts for approval: creates the request, moves posts to pending_approval and issues the first link. */
+function issuedOf(l: ReturnType<typeof newLinkValues>, linkId: string): IssuedLink {
+  return {
+    linkId,
+    recipientName: l.recipientName,
+    mode: l.mode,
+    url: `${baseUrl()}/a/${l.token}`,
+    expiresAt: l.expiresAt,
+  };
+}
+
+/**
+ * Sends posts for approval: creates the request, moves posts to pending_approval and issues one
+ * personal link per recipient (or a single shared link).
+ */
 export async function createApprovalRequest(
   input: CreateApprovalRequestInput,
 ): Promise<CreateApprovalRequestResult> {
   const parsed = createApprovalRequestSchema.safeParse(input);
   if (!parsed.success) return fail("invalid_input", parsed.error.issues[0]?.message);
-  const { profileId, title, message, label } = parsed.data;
+  const { profileId, title, message, label, mode } = parsed.data;
+  const recipients: RecipientInput[] = mode === "personal" ? parsed.data.recipients : [];
   const postIds = [...new Set(parsed.data.postIds)];
   const member = await memberForProfile(profileId);
   if (!member) return fail("not_found");
@@ -101,7 +136,17 @@ export async function createApprovalRequest(
   }
 
   const actor = `user:${member.user.id}` as const;
-  const link = newLinkValues("", label);
+  const newLinks =
+    mode === "personal"
+      ? recipients.map((r) =>
+          newLinkValues("", {
+            mode,
+            recipientName: r.name,
+            recipientContact: r.contact,
+            label,
+          }),
+        )
+      : [newLinkValues("", { mode, label })];
   const result = await db.transaction(async (tx) => {
     const [req] = await tx
       .insert(approvalRequests)
@@ -114,10 +159,14 @@ export async function createApprovalRequest(
       })
       .returning({ id: approvalRequests.id });
     await tx.insert(approvalItems).values(postIds.map((postId) => ({ requestId: req.id, postId })));
-    const [l] = await tx
-      .insert(approvalLinks)
-      .values({ ...link.values, requestId: req.id })
-      .returning({ id: approvalLinks.id });
+    const inserted: string[] = [];
+    for (const nl of newLinks) {
+      const [l] = await tx
+        .insert(approvalLinks)
+        .values({ ...nl.values, requestId: req.id })
+        .returning({ id: approvalLinks.id });
+      inserted.push(l.id);
+    }
     const now = new Date();
     await tx
       .update(posts)
@@ -135,18 +184,21 @@ export async function createApprovalRequest(
       profileId,
       actor,
       event: "approval.request_created",
-      payload: { requestId: req.id, linkId: l.id, postIds },
+      payload: { requestId: req.id, linkId: inserted[0], linkIds: inserted, mode, postIds },
     });
-    return { requestId: req.id, linkId: l.id };
+    return { requestId: req.id, linkIds: inserted };
   });
 
   revalidateApprovals(profileId);
+  const links = newLinks.map((nl, i) => issuedOf(nl, result.linkIds[i]));
   return {
     ok: true,
     data: {
-      ...result,
-      url: `${baseUrl()}/a/${link.token}`,
-      expiresAt: link.expiresAt,
+      requestId: result.requestId,
+      linkId: links[0].linkId,
+      url: links[0].url,
+      expiresAt: links[0].expiresAt,
+      links,
     },
   };
 }
@@ -163,16 +215,15 @@ async function loadRequest(requestId: string) {
   return member ? { req, member } : null;
 }
 
-/** Issues an additional link (e.g. for another contact) for an open request. */
-export async function issueApprovalLink(
+async function issueLink(
   requestId: string,
-  label?: string,
+  spec: NewLinkSpec,
 ): Promise<CreateApprovalRequestResult> {
   const loaded = await loadRequest(requestId);
   if (!loaded) return fail("not_found");
   const { req, member } = loaded;
   if (req.status !== "open" && req.status !== "partially_decided") return fail("link_inactive");
-  const link = newLinkValues(req.id, label?.trim().slice(0, 80));
+  const link = newLinkValues(req.id, spec);
   const [l] = await db
     .insert(approvalLinks)
     .values(link.values)
@@ -181,18 +232,42 @@ export async function issueApprovalLink(
     profileId: req.profileId,
     actor: `user:${member.user.id}`,
     event: "approval.link_issued",
-    payload: { requestId: req.id, linkId: l.id },
+    payload: { requestId: req.id, linkId: l.id, mode: link.mode },
   });
   revalidateApprovals(req.profileId);
+  const issued = issuedOf(link, l.id);
   return {
     ok: true,
     data: {
       requestId: req.id,
-      linkId: l.id,
-      url: `${baseUrl()}/a/${link.token}`,
-      expiresAt: link.expiresAt,
+      linkId: issued.linkId,
+      url: issued.url,
+      expiresAt: issued.expiresAt,
+      links: [issued],
     },
   };
+}
+
+/** Issues an additional personal link (one more recipient) for an open request. */
+export async function issuePersonalLink(
+  requestId: string,
+  recipient: RecipientInput,
+): Promise<CreateApprovalRequestResult> {
+  const parsed = issuePersonalLinkSchema.safeParse(recipient);
+  if (!parsed.success) return fail("invalid_input", parsed.error.issues[0]?.message);
+  return issueLink(requestId, {
+    mode: "personal",
+    recipientName: parsed.data.name,
+    recipientContact: parsed.data.contact,
+  });
+}
+
+/** Issues an additional shared (open) link. Prefer `issuePersonalLink`. */
+export async function issueApprovalLink(
+  requestId: string,
+  label?: string,
+): Promise<CreateApprovalRequestResult> {
+  return issueLink(requestId, { mode: "shared", label: label?.trim().slice(0, 80) });
 }
 
 export async function revokeApprovalLink(linkId: string): Promise<ActionResult> {

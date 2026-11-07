@@ -57,6 +57,13 @@
       "when": 1794021120526,
       "tag": "0007_futuristic_malice",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794022372729,
+      "tag": "0008_fluffy_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

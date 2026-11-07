@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   approvalDecisions,
   approvalItems,
+  approvalLinkOpens,
   approvalLinks,
   approvalRequests,
   mediaAssets,
@@ -23,7 +24,7 @@ import type {
   DecisionRecord,
   PublicApprovalView,
 } from "./contracts";
-import { resolveLink } from "./decide";
+import { APPROVAL_RULE, derivePostStatus, resolveLink } from "./decide";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -52,12 +53,20 @@ function toRecord(d: DecisionRow): DecisionRecord {
   };
 }
 
-/** Latest decision per post for one request. */
-async function lastDecisions(requestId: string): Promise<Map<string, DecisionRow>> {
+/** Latest decision per post for one request (optionally only those of one link). */
+async function lastDecisions(
+  requestId: string,
+  linkId?: string,
+): Promise<Map<string, DecisionRow>> {
   const rows = await db
     .select()
     .from(approvalDecisions)
-    .where(eq(approvalDecisions.requestId, requestId))
+    .where(
+      and(
+        eq(approvalDecisions.requestId, requestId),
+        linkId ? eq(approvalDecisions.linkId, linkId) : undefined,
+      ),
+    )
     .orderBy(asc(approvalDecisions.decidedAt));
   const map = new Map<string, DecisionRow>();
   for (const r of rows) map.set(r.postId, r);
@@ -70,25 +79,40 @@ function senderName(u: { name: string | null; email: string | null } | undefined
   return "Seu social media";
 }
 
-/** Public, token-based (server only). Increments opened_count when `recordOpen` is true. */
+/**
+ * Public, token-based (server only). When `recordOpen` is true, counts the open and stores
+ * ip/user agent in `approval_link_opens` (active and used links only).
+ */
 export async function getPublicApproval(
   token: string,
-  opts: { recordOpen?: boolean } = {},
+  opts: { recordOpen?: boolean; ip?: string | null; userAgent?: string | null } = {},
 ): Promise<PublicApprovalView> {
   const empty = (linkState: PublicApprovalView["linkState"]): PublicApprovalView => ({
     linkState,
+    recipientName: null,
+    mode: "personal",
+    readOnly: false,
     request: null,
     profile: null,
     feedItems: [],
     items: [],
   });
   const resolved = await resolveLink(token);
-  if (resolved.state !== "active") return empty(resolved.state);
+  if (resolved.state === "not_found") return empty("not_found");
+  if (resolved.state !== "active" && resolved.state !== "used") return empty(resolved.state);
   const { link, request } = resolved;
+  const used = resolved.state === "used";
 
   if (opts.recordOpen) {
     const now = new Date();
     await db.transaction(async (tx) => {
+      await tx.insert(approvalLinkOpens).values({
+        linkId: link.id,
+        openedAt: now,
+        ip: opts.ip ?? null,
+        userAgent: opts.userAgent?.slice(0, 500) ?? null,
+        linkState: resolved.state,
+      });
       await tx
         .update(approvalLinks)
         .set({ openedCount: sql`${approvalLinks.openedCount} + 1`, lastOpenedAt: now })
@@ -145,10 +169,14 @@ export async function getPublicApproval(
     list.push({ ...urls[i], sortOrder: m.sortOrder, gridCrop: m.gridCrop });
     mediaByPost.set(m.postId, list);
   });
-  const decisions = await lastDecisions(request.id);
+  // Personal links show (and lock) only their own decisions; shared links show the latest of any link.
+  const decisions = await lastDecisions(request.id, link.mode === "personal" ? link.id : undefined);
 
   return {
-    linkState: "active",
+    linkState: used ? "used" : "active",
+    recipientName: link.recipientName,
+    mode: link.mode,
+    readOnly: used,
     request: {
       id: request.id,
       title: request.title,
@@ -216,7 +244,30 @@ async function summarize(
   const decByKey = new Map<string, DecisionRow>();
   for (const d of decRows) decByKey.set(`${d.requestId}:${d.postId}`, d);
 
-  const linkLabel = new Map(links.map((l) => [l.id, l.label]));
+  const linkName = new Map(links.map((l) => [l.id, l.recipientName ?? l.label]));
+  const linkIds = links.map((l) => l.id);
+  const ranked = db
+    .select({
+      linkId: approvalLinkOpens.linkId,
+      openedAt: approvalLinkOpens.openedAt,
+      ip: approvalLinkOpens.ip,
+      userAgent: approvalLinkOpens.userAgent,
+      rn: sql<number>`row_number() over (partition by ${approvalLinkOpens.linkId} order by ${approvalLinkOpens.openedAt} desc)`.as(
+        "rn",
+      ),
+    })
+    .from(approvalLinkOpens)
+    .where(inArray(approvalLinkOpens.linkId, linkIds.length ? linkIds : [""]))
+    .as("ranked");
+  const openRows = linkIds.length
+    ? await db.select().from(ranked).where(lte(ranked.rn, 20)).orderBy(desc(ranked.openedAt))
+    : [];
+  const opensByLink = new Map<string, ApprovalLinkSummary["opens"]>();
+  for (const o of openRows) {
+    const list = opensByLink.get(o.linkId) ?? [];
+    list.push({ openedAt: o.openedAt, ip: o.ip, userAgent: o.userAgent });
+    opensByLink.set(o.linkId, list);
+  }
   const avatarPaths = await db
     .select({ id: profiles.id, thumbPath: mediaAssets.thumbPath })
     .from(profiles)
@@ -239,11 +290,22 @@ async function summarize(
         caption: post.caption,
         status: post.status,
         decision: d ? toRecord(d) : null,
-        decidedViaLink: d ? (linkLabel.get(d.linkId) ?? null) : null,
+        decidedViaLink: d ? (linkName.get(d.linkId) ?? null) : null,
       };
     });
-    const approved = summaries.filter((s) => s.decision?.decision === "approved").length;
-    const changes = summaries.filter((s) => s.decision?.decision === "changes_requested").length;
+    const reqRecipients = links
+      .filter((l) => l.requestId === request.id && l.mode === "personal" && !l.revokedAt)
+      .map((l) => l.id);
+    const derived = its.map(({ post }) =>
+      derivePostStatus(
+        decRows.filter((d) => d.requestId === request.id && d.postId === post.id),
+        post.sentForApprovalAt,
+        APPROVAL_RULE,
+        reqRecipients,
+      ),
+    );
+    const approved = derived.filter((d) => d === "approved").length;
+    const changes = derived.filter((d) => d === "changes_requested").length;
     const reqLinks: ApprovalLinkSummary[] = links
       .filter((l) => l.requestId === request.id)
       .map((l) => ({
@@ -253,6 +315,15 @@ async function summarize(
         revokedAt: l.revokedAt,
         openedCount: l.openedCount,
         lastOpenedAt: l.lastOpenedAt,
+        mode: l.mode,
+        recipientName: l.recipientName,
+        recipientContact: l.recipientContact,
+        usedAt: l.usedAt,
+        usedReason: l.usedReason,
+        opens: opensByLink.get(l.id) ?? [],
+        decisions: decRows
+          .filter((d) => d.linkId === l.id)
+          .map((d) => ({ postId: d.postId, decision: d.decision, decidedAt: d.decidedAt })),
       }));
     return {
       id: request.id,

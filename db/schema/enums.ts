@@ -42,3 +42,8 @@ export const connectionStatus = pgEnum("connection_status", [
   "not_professional",
   "missing_scope",
 ]);
+export const approvalLinkMode = pgEnum("approval_link_mode", ["shared", "personal"]);
+export const approvalLinkUsedReason = pgEnum("approval_link_used_reason", [
+  "decided",
+  "superseded",
+]);

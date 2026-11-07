@@ -8,11 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { DecisionRecord } from "@/lib/approvals/contracts";
-import { formatDateBr, formatTimeBr } from "@/lib/approvals/ui-format";
+import { formatDayMonth, formatTimeBr } from "@/lib/approvals/ui-format";
 
 export function ApprovalBar({
   decision,
   lockedNote,
+  readOnly = false,
+  mode,
+  recipientName,
   approverName,
   onApproverNameChange,
   busy,
@@ -22,6 +25,11 @@ export function ApprovalBar({
   decision: DecisionRecord | null;
   /** Shown when there is no decision but the item cannot be decided now. */
   lockedNote: string | null;
+  /** Receipt mode (used link): never shows buttons. */
+  readOnly?: boolean;
+  mode: "personal" | "shared";
+  /** Recipient of a personal link; shown as "Decidindo como ...". */
+  recipientName: string | null;
   approverName: string;
   onApproverNameChange: (name: string) => void;
   busy: boolean;
@@ -43,12 +51,20 @@ export function ApprovalBar({
       >
         <p className="flex items-center gap-1.5 font-semibold" suppressHydrationWarning>
           <Icon aria-hidden className="size-4 shrink-0" strokeWidth={2.5} />
-          {approved ? "Aprovado" : "Ajustes solicitados"} em {formatDateBr(decision.decidedAt)} às{" "}
+          {approved ? "Aprovado" : "Ajustes solicitados"} em {formatDayMonth(decision.decidedAt)} às{" "}
           {formatTimeBr(decision.decidedAt)}
         </p>
         {decision.approverName ? <p>por {decision.approverName}</p> : null}
         {decision.comment ? <p className="whitespace-pre-line">{decision.comment}</p> : null}
       </div>
+    );
+  }
+
+  if (readOnly) {
+    return (
+      <p role="status" className="bg-lavanda text-ink-2 rounded-2xl p-3 text-sm">
+        Nenhuma decisão registrada para esta publicação.
+      </p>
     );
   }
 
@@ -71,16 +87,22 @@ export function ApprovalBar({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${uid}-name`}>Seu nome (opcional)</Label>
-        <Input
-          id={`${uid}-name`}
-          value={approverName}
-          maxLength={80}
-          autoComplete="name"
-          onChange={(e) => onApproverNameChange(e.target.value)}
-        />
-      </div>
+      {mode === "personal" && recipientName ? (
+        <p className="text-sm">
+          Decidindo como <strong>{recipientName}</strong>
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${uid}-name`}>Seu nome (opcional)</Label>
+          <Input
+            id={`${uid}-name`}
+            value={approverName}
+            maxLength={80}
+            autoComplete="name"
+            onChange={(e) => onApproverNameChange(e.target.value)}
+          />
+        </div>
+      )}
 
       {askingChanges ? (
         <div className="flex flex-col gap-2">
