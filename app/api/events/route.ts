@@ -9,6 +9,11 @@ import { toLiveEvent } from "@/lib/realtime/events";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+/**
+ * Serverless functions are killed at maxDuration and that is logged as a runtime error. We end
+ * the stream ourselves a bit earlier; EventSource reconnects on its own (retry hint below).
+ */
+const STREAM_TTL_MS = 50_000;
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -25,11 +30,13 @@ export async function GET(req: NextRequest) {
     const enc = new TextEncoder();
     let stop: (() => Promise<void>) | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let ttl: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
     const cleanup = async () => {
       if (closed) return;
       closed = true;
       if (timer) clearInterval(timer);
+      if (ttl) clearTimeout(ttl);
       await stop?.();
     };
     const stream = new ReadableStream<Uint8Array>({
@@ -58,8 +65,17 @@ export async function GET(req: NextRequest) {
           return;
         }
         if (closed) return void (await stop?.());
-        send(": connected\n\n");
+        send("retry: 1000\n: connected\n\n");
         timer = setInterval(() => send(": ping\n\n"), 20_000);
+        ttl = setTimeout(() => {
+          void cleanup().then(() => {
+            try {
+              controller.close();
+            } catch {
+              /* already closed */
+            }
+          });
+        }, STREAM_TTL_MS);
       },
       cancel() {
         return cleanup();
