@@ -275,6 +275,13 @@ export async function exchangeFacebookCode(code: string, fetchImpl: typeof fetch
   );
   const ig = accounts.data.find((p) => p.instagram_business_account)?.instagram_business_account;
   if (!ig) {
+    // Diagnostic only: page names and whether each has an Instagram account. No tokens.
+    console.warn(
+      "[instagram] no page with an Instagram account; pages granted:",
+      JSON.stringify(
+        accounts.data.map((p) => ({ name: p.name ?? p.id, ig: !!p.instagram_business_account })),
+      ).slice(0, 500),
+    );
     throw new OAuthError("no_instagram_page", "no page with an Instagram professional account");
   }
 
