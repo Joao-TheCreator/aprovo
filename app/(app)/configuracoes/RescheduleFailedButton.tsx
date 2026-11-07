@@ -1,5 +1,6 @@
 "use client";
 
+import { RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ export function RescheduleFailedButton({
   const [pending, start] = useTransition();
   return (
     <Button
+      className="h-auto min-h-12 w-full py-3 text-center whitespace-normal"
       disabled={pending}
       onClick={() =>
         start(async () => {
@@ -32,6 +34,7 @@ export function RescheduleFailedButton({
         })
       }
     >
+      <RotateCcw aria-hidden className={pending ? "animate-spin" : undefined} />
       {pending
         ? "Reagendando…"
         : count === 1

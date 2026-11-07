@@ -80,7 +80,7 @@ export function ConnectProfileForm() {
             <Skeleton key={i} className="aspect-square rounded-none" />
           ))}
         </div>
-        <p className="text-muted-foreground text-center text-[15px]">
+        <p className="text-body text-muted-foreground text-center">
           Carregando o feed de @{username}…
         </p>
       </div>
@@ -96,11 +96,13 @@ export function ConnectProfileForm() {
       }}
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="handle">@ do Instagram</Label>
+        <Label htmlFor="handle" className="text-caption">
+          @ do Instagram
+        </Label>
         <div className="relative">
           <span
             aria-hidden
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 -translate-y-1/2"
+            className="text-brand-ink font-display pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-base"
           >
             @
           </span>
@@ -125,7 +127,7 @@ export function ConnectProfileForm() {
         </div>
         <p
           id="handle-help"
-          className={showInvalid ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
+          className={showInvalid ? "text-danger-ink text-sm" : "text-muted-foreground text-sm"}
         >
           {showInvalid
             ? "Informe um @ válido (letras, números, ponto e _)."
@@ -134,8 +136,13 @@ export function ConnectProfileForm() {
       </div>
 
       {error ? (
-        <div role="alert" className="bg-lavanda flex flex-col gap-3 rounded-2xl p-4">
-          <p className="text-[15px]">{error.message ?? CONNECT_ERROR_MESSAGES[error.code]}</p>
+        <div
+          role="alert"
+          className="bg-brand-soft border-outline animate-pop-in flex flex-col gap-3 rounded-3xl border p-4"
+        >
+          <p className="text-body font-medium">
+            {error.message ?? CONNECT_ERROR_MESSAGES[error.code]}
+          </p>
           {error.code === "already_connected" ? (
             error.profileId ? (
               <Button asChild variant="secondary">
@@ -166,7 +173,7 @@ export function ConnectProfileForm() {
         </div>
       ) : null}
 
-      <Button type="submit" disabled={!valid}>
+      <Button type="submit" size="lg" disabled={!valid}>
         Continuar
       </Button>
     </form>

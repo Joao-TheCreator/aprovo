@@ -1,5 +1,6 @@
 "use client";
 
+import { Unplug } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,10 @@ export function DisconnectButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Desconectar</Button>
+        <Button variant="outline" className="hover:border-danger-ink hover:text-danger-ink">
+          <Unplug aria-hidden />
+          Desconectar
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

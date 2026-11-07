@@ -20,7 +20,7 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          "border-border bg-popover text-popover-foreground z-50 min-w-48 overflow-hidden rounded-2xl border p-1.5 shadow-lg",
+          "glass border-outline text-popover-foreground shadow-sheet data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out z-50 min-w-56 origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-3xl border p-1.5",
           className,
         )}
         {...props}
@@ -40,9 +40,8 @@ function DropdownMenuItem({
     <DropdownMenuPrimitive.Item
       data-slot="dropdown-menu-item"
       className={cn(
-        "focus:bg-secondary focus:text-secondary-foreground relative flex cursor-default items-center gap-2 rounded-xl px-3 py-2 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4",
-        variant === "destructive" &&
-          "text-destructive focus:bg-destructive/10 focus:text-destructive",
+        "focus:bg-surface-2 focus:text-foreground relative flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-5",
+        variant === "destructive" && "text-danger-ink focus:bg-danger/10 focus:text-danger-ink",
         className,
       )}
       {...props}
@@ -57,7 +56,7 @@ function DropdownMenuLabel({
   return (
     <DropdownMenuPrimitive.Label
       data-slot="dropdown-menu-label"
-      className={cn("px-3 py-2 text-sm font-semibold", className)}
+      className={cn("px-3 py-2 text-sm font-bold", className)}
       {...props}
     />
   );

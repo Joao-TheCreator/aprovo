@@ -3,7 +3,7 @@
 import { LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ProfileAvatar } from "@/components/app/ProfileAvatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,33 +12,39 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 export type ShellUser = { name?: string | null; email?: string | null; image?: string | null };
 
-function initials(user?: ShellUser) {
-  const source = user?.name || user?.email;
-  if (!source) return "?";
-  return source
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-}
-
-export function UserMenu({ user, showName = false }: { user?: ShellUser; showName?: boolean }) {
+export function UserMenu({
+  user,
+  showName = false,
+  className,
+}: {
+  user?: ShellUser;
+  showName?: boolean;
+  className?: string;
+}) {
   const label = user?.name || user?.email || "Conta";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Menu da conta"
-        className="focus-visible:ring-ring/50 flex items-center gap-3 rounded-full outline-none focus-visible:ring-[3px]"
+        className={cn(
+          "press focus-visible:ring-ring focus-visible:ring-offset-background flex min-h-11 min-w-11 items-center gap-3 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          showName && "hover:bg-surface-2 w-full p-1 pr-3 text-left",
+          className,
+        )}
       >
-        <Avatar>
-          {user?.image ? <AvatarImage src={user.image} alt="" /> : null}
-          <AvatarFallback>{initials(user)}</AvatarFallback>
-        </Avatar>
-        {showName ? <span className="truncate text-sm font-semibold">{label}</span> : null}
+        <ProfileAvatar src={user?.image} name={user?.name || user?.email} size="sm" ring />
+        {showName ? (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-bold">{label}</span>
+            {user?.name && user.email ? (
+              <span className="text-muted-foreground truncate text-xs">{user.email}</span>
+            ) : null}
+          </span>
+        ) : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>
@@ -52,7 +58,7 @@ export function UserMenu({ user, showName = false }: { user?: ShellUser; showNam
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/configuracoes">
-            <Settings strokeWidth={1.75} />
+            <Settings strokeWidth={2} />
             Configurações
           </Link>
         </DropdownMenuItem>
@@ -60,7 +66,7 @@ export function UserMenu({ user, showName = false }: { user?: ShellUser; showNam
           {/* Full navigation to an API route, not a page: plain anchor is intended. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/api/auth/signout">
-            <LogOut strokeWidth={1.75} />
+            <LogOut strokeWidth={2} />
             Sair
           </a>
         </DropdownMenuItem>
