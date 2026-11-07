@@ -12,6 +12,7 @@ const PUBLIC = [
   /^\/a\//,
   /^\/api\/approval\//, // public decision endpoint (token-authenticated)
   /^\/api\/instagram\/refresh$/, // Vercel cron; the handler checks CRON_SECRET itself
+  /^\/api\/publishing\/run$/, // scheduler trigger; the handler checks CRON_SECRET itself
   /^\/api\/instagram\/deauthorize$/, // Meta deauthorize callback; the handler verifies signed_request
   /^\/legal(\/|$)/, // privacy, terms, data deletion
   /^\/api\/auth(\/|$)/,

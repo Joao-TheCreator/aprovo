@@ -1,3 +1,6 @@
 {
-  "crons": [{ "path": "/api/instagram/refresh", "schedule": "0 3 * * 1" }]
+  "crons": [
+    { "path": "/api/instagram/refresh", "schedule": "0 3 * * 1" },
+    { "path": "/api/publishing/run", "schedule": "0 * * * *" }
+  ]
 }

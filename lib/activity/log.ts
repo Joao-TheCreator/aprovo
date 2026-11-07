@@ -4,7 +4,7 @@ import { activityLog } from "@/db/schema";
 /** A Drizzle transaction handle (first arg of `db.transaction` callbacks). */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-export type ActivityActor = `user:${string}` | `link:${string}`;
+export type ActivityActor = `user:${string}` | `link:${string}` | `system:${string}`;
 
 export async function logActivity(
   conn: Database | Tx,
