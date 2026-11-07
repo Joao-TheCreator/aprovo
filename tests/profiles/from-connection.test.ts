@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { importedPosts, profiles } from "@/db/schema";
+import { importedPosts, profiles, users, workspaceMembers, workspaces } from "@/db/schema";
 import { completeOAuth, getConnectionById } from "@/lib/instagram/oauth";
 import { ACCOUNT_DISCONNECTED_MESSAGE } from "@/lib/profiles/contracts";
 import {
@@ -10,6 +10,9 @@ import {
   mapConnectionAccountType,
 } from "@/lib/profiles/from-connection";
 import { importProfileFromProvider } from "@/lib/profiles/import";
+import { getProfileFeed } from "@/lib/profiles/queries";
+import { findCurrentWorkspace } from "@/lib/workspace/current";
+import { createWorkspaceForUser } from "@/lib/workspace/create";
 import { testDb } from "../setup";
 import { makeRequireMock, seedWorkspace } from "../media/helpers";
 
@@ -19,20 +22,12 @@ vi.mock("@/lib/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/instagram/download", () => ({ downloadImage: vi.fn(async () => null) }));
 vi.mock("@/lib/auth/require", async () => {
   const base = await makeRequireMock(mocks);
-  const { eq } = await import("drizzle-orm");
   const { db } = await import("@/db/client");
-  const { workspaceMembers, workspaces } = await import("@/db/schema");
+  const { findCurrentWorkspace } = await import("@/lib/workspace/current");
   return {
     ...base,
-    getCurrentWorkspace: async (userId: string) => {
-      const [row] = await db
-        .select({ ws: workspaces })
-        .from(workspaceMembers)
-        .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-        .where(eq(workspaceMembers.userId, userId))
-        .limit(1);
-      return row ? { ...row.ws, role: "owner" } : null;
-    },
+    // Same rule as the real getCurrentWorkspace (which needs the Auth.js runtime).
+    getCurrentWorkspace: (userId: string) => findCurrentWorkspace(db, userId),
   };
 });
 
@@ -297,5 +292,78 @@ describe("callback route", () => {
     expect(p.accountType).toBe("business");
     const location = new URL(res.headers.get("location")!);
     expect(location.pathname + location.search).toBe(`/perfis/${p.id}?connected=1`);
+  });
+});
+
+describe("current workspace rule", () => {
+  const setCreatedAt = (workspaceId: string, userId: string, at: Date) =>
+    testDb
+      .update(workspaceMembers)
+      .set({ createdAt: at })
+      .where(
+        and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)),
+      );
+
+  it("picks the oldest live membership", async () => {
+    const s = await seedWorkspace();
+    const second = await createWorkspaceForUser(testDb, s.user);
+    await setCreatedAt(s.ws.id, s.user.id, new Date("2026-01-02T00:00:00Z"));
+    await setCreatedAt(second.id, s.user.id, new Date("2026-01-01T00:00:00Z"));
+    expect((await findCurrentWorkspace(testDb, s.user.id))?.id).toBe(second.id);
+  });
+
+  it("breaks created_at ties by workspace id, so the answer is stable", async () => {
+    const s = await seedWorkspace();
+    const second = await createWorkspaceForUser(testDb, s.user);
+    const at = new Date("2026-01-01T00:00:00Z");
+    await setCreatedAt(s.ws.id, s.user.id, at);
+    await setCreatedAt(second.id, s.user.id, at);
+    const expected = [s.ws.id, second.id].sort()[0];
+    for (let i = 0; i < 3; i++) {
+      expect((await findCurrentWorkspace(testDb, s.user.id))?.id).toBe(expected);
+    }
+  });
+
+  it("skips soft-deleted workspaces", async () => {
+    const s = await seedWorkspace();
+    const second = await createWorkspaceForUser(testDb, s.user);
+    await setCreatedAt(s.ws.id, s.user.id, new Date("2026-01-01T00:00:00Z"));
+    await testDb
+      .update(workspaces)
+      .set({ deletedAt: new Date() })
+      .where(eq(workspaces.id, s.ws.id));
+    expect((await findCurrentWorkspace(testDb, s.user.id))?.id).toBe(second.id);
+  });
+
+  it("the OAuth callback creates the profile in the same workspace the list shows", async () => {
+    const s = await seedWorkspace();
+    const second = await createWorkspaceForUser(testDb, s.user);
+    await setCreatedAt(s.ws.id, s.user.id, new Date("2026-01-01T00:00:00Z"));
+    await setCreatedAt(second.id, s.user.id, new Date("2026-01-02T00:00:00Z"));
+    mocks.user.id = s.user.id;
+    vi.stubGlobal("fetch", metaFetch(B, "TOKEN_B"));
+    const { GET } = await import("@/app/api/instagram/callback/route");
+    await GET(
+      new NextRequest("http://localhost:3000/api/instagram/callback?code=c&state=s1", {
+        headers: { cookie: "ig_oauth_state=s1; ig_oauth_provider=instagram" },
+      }),
+    );
+    const [p] = await testDb.select().from(profiles).where(eq(profiles.igUsername, "conta_b"));
+    const current = await findCurrentWorkspace(testDb, s.user.id);
+    expect(p.workspaceId).toBe(current?.id);
+    expect(p.workspaceId).toBe(s.ws.id);
+  });
+});
+
+describe("profile access is consistent", () => {
+  it("getProfileFeed (used by /perfis/[id] and /agendadas) is null for a non-member and set for a member", async () => {
+    const s = await seedWorkspace("owner@x.co");
+    const [other] = await testDb.insert(users).values({ email: "other@x.co" }).returning();
+    await createWorkspaceForUser(testDb, other);
+    mocks.user.id = other.id;
+    expect(await getProfileFeed(s.profile.id)).toBeNull();
+    expect(await getProfileFeed("not-a-uuid")).toBeNull();
+    mocks.user.id = s.user.id;
+    expect((await getProfileFeed(s.profile.id))?.profile.id).toBe(s.profile.id);
   });
 });

@@ -2,15 +2,16 @@
 /**
  * Authorization entry points. App code MAY NOT scope queries by any other means:
  * - requireUser(): session or redirect to /entrar
- * - getCurrentWorkspace(userId): the user's first workspace
+ * - getCurrentWorkspace(userId): the user's oldest live workspace (deterministic, see lib/workspace/current.ts)
  * - requireWorkspaceMember(workspaceId, { roles? }): membership (and role) check
  * - requireWorkspaceForProfile(profileId): profile -> workspace -> membership check
  * Every Drizzle query on tenant data must be filtered by the workspace id returned here.
  */
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/db/client";
-import { profiles, workspaceMembers, workspaces } from "@/db/schema";
+import { profiles } from "@/db/schema";
+import { findCurrentWorkspace } from "@/lib/workspace/current";
 import { getMemberRole, type MemberRole } from "@/lib/workspace/membership";
 import { auth } from "./index";
 
@@ -20,15 +21,9 @@ export async function requireUser() {
   return session.user;
 }
 
+/** The user's current workspace (single rule in lib/workspace/current.ts). */
 export async function getCurrentWorkspace(userId: string) {
-  const [row] = await db
-    .select({ workspace: workspaces, role: workspaceMembers.role })
-    .from(workspaceMembers)
-    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-    .where(and(eq(workspaceMembers.userId, userId), isNull(workspaces.deletedAt)))
-    .orderBy(asc(workspaceMembers.createdAt))
-    .limit(1);
-  return row ? { ...row.workspace, role: row.role } : null;
+  return findCurrentWorkspace(db, userId);
 }
 
 export async function requireWorkspaceMember(

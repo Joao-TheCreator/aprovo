@@ -5,7 +5,7 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { mediaAssets, posts, profiles } from "@/db/schema";
-import { getCurrentWorkspace, requireUser, requireWorkspaceMember } from "@/lib/auth/require";
+import { getCurrentWorkspace, requireUser, requireWorkspaceForProfile } from "@/lib/auth/require";
 import { getStorage } from "@/lib/storage";
 import { buildProfileFeed } from "./feed";
 import type { PostStatus, ProfileFeed, ProfileListItem } from "./contracts";
@@ -83,19 +83,19 @@ export async function listProfiles(): Promise<ProfileListItem[]> {
   }));
 }
 
-/** Returns null when the profile does not exist or the user is not a member (caller does notFound()). */
+/**
+ * Returns null when the profile does not exist or the user is not a member (caller does
+ * notFound()). Authorization is requireWorkspaceForProfile, the same check every other
+ * profile-scoped page uses, so /perfis/[id] and its sub-pages 404 consistently.
+ */
 export async function getProfileFeed(profileId: string): Promise<ProfileFeed | null> {
   if (!/^[0-9a-f-]{36}$/i.test(profileId)) return null;
-  const [p] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
-  if (!p) return null;
-  // requireWorkspaceMember calls notFound() for non-members; treat that as null for the caller.
   try {
-    await requireWorkspaceMember(p.workspaceId);
+    await requireWorkspaceForProfile(profileId);
   } catch (e) {
     if (isNextNotFound(e)) return null;
     throw e;
   }
-
   return buildProfileFeed(profileId);
 }
 

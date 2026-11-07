@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { profiles, type InstagramConnection } from "@/db/schema";
 import type { AccountType } from "./contracts";
@@ -34,7 +34,8 @@ export async function findOrCreateProfileForConnection(
       .where(
         and(
           eq(profiles.workspaceId, connection.workspaceId),
-          eq(profiles.igUsername, connection.username),
+          // Explicit cast keeps citext (case-insensitive) semantics whatever the driver binds.
+          sql`${profiles.igUsername} = ${connection.username}::citext`,
         ),
       )
       .limit(1);
