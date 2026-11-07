@@ -16,6 +16,7 @@ import {
   listConnections,
   PUBLISH_SCOPE,
 } from "@/lib/instagram/oauth";
+import { getPublishingQuota } from "@/lib/publishing/actions";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import { DisconnectButton } from "./DisconnectButton";
 
@@ -80,6 +81,20 @@ export default async function ConfiguracoesPage({
         .where(and(eq(profiles.workspaceId, ws.id), isNotNull(profiles.connectionId)))
     : [];
   const profileByConnection = new Map(linked.map((p) => [p.connectionId, p.id]));
+  // Daily publishing quota per publish-capable account (cached 10 min; null when unavailable).
+  // TODO(T9): "Avisar por e-mail quando publicar" toggle lives here once the e-mail template exists.
+  const quotaByConnection = new Map(
+    await Promise.all(
+      connections.map(async (c) => {
+        const linkedProfileId = profileByConnection.get(c.id);
+        const quota =
+          linkedProfileId && c.status === "active" && canPublish(c)
+            ? await getPublishingQuota(linkedProfileId)
+            : null;
+        return [c.id, quota] as const;
+      }),
+    ),
+  );
   const configured = isOAuthConfigured();
   const publishEnabled = instagramScopes().includes(PUBLISH_SCOPE);
   const activeProvider = activeOAuthProvider();
@@ -114,6 +129,7 @@ export default async function ConfiguracoesPage({
                 const profileId = profileByConnection.get(c.id);
                 const publishGranted = canPublish(c);
                 const statusText = statusMessage(c);
+                const quota = quotaByConnection.get(c.id) ?? null;
                 const legacy = c.provider === "instagram" && activeProvider === "facebook";
                 return (
                   <li
@@ -146,6 +162,11 @@ export default async function ConfiguracoesPage({
                     ) : (
                       <p className="text-muted-foreground text-sm">Conexão ativa</p>
                     )}
+                    {quota ? (
+                      <p className="text-muted-foreground text-sm">
+                        Publicações hoje: {quota.used}/{quota.total}
+                      </p>
+                    ) : null}
                     {publishEnabled && !publishGranted && c.status === "active" ? (
                       <p className="text-muted-foreground text-xs">
                         Reconecte para autorizar a publicação

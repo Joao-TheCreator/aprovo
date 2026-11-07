@@ -119,3 +119,65 @@ export class PublishValidationError extends Error {
     this.issues = issues;
   }
 }
+
+export const reschedulePublicationInputSchema = z.object({
+  publicationId: z.string().uuid(),
+  scheduledAt: scheduledAtSchema,
+  timezone: timezoneSchema,
+});
+export type ReschedulePublicationActionInput = z.infer<typeof reschedulePublicationInputSchema>;
+
+export const cancelPublicationInputSchema = z.object({ publicationId: z.string().uuid() });
+export type CancelPublicationActionInput = z.infer<typeof cancelPublicationInputSchema>;
+
+/** Minimum lead time between "now" and a scheduled time. */
+export const MIN_SCHEDULE_LEAD_MS = 2 * 60 * 1000;
+
+/** User-facing messages for the schedule, reschedule and cancel actions, by error code. */
+export const PUBLISHING_ACTION_MESSAGES: Record<string, string> = {
+  invalid_input: "Confira a data e a hora escolhidas.",
+  not_found: "Publicação não encontrada.",
+  invalid_status: "Só publicações aprovadas podem ser agendadas.",
+  already_scheduled: "Esta publicação já está agendada.",
+  past_date: "Escolha um horário no futuro.",
+  connection_inactive: "Conecte o Instagram do perfil em Configurações.",
+  missing_scope: PUBLICATION_ERROR_MESSAGES.missing_scope,
+  media_rejected: PUBLICATION_ERROR_MESSAGES.media_rejected,
+  publishing_now: "A publicação está sendo enviada agora e não pode ser cancelada.",
+  not_cancellable: "Só publicações agendadas podem ser canceladas.",
+  not_reschedulable: "Só publicações agendadas ou que falharam podem ser reagendadas.",
+};
+
+/** Row of the "Agendadas" screen (docs/12 section 5.5). */
+export type PublicationListItem = {
+  id: string;
+  postId: string;
+  kind: "post" | "video";
+  captionExcerpt: string;
+  thumbUrl: string | null;
+  scheduledAt: Date;
+  timezone: string;
+  status: PublicationStatus;
+  attempts: number;
+  lastErrorCode: string | null;
+  lastError: string | null;
+  permalink: string | null;
+  publishedAt: Date | null;
+};
+
+export type PublicationLists = {
+  scheduled: PublicationListItem[];
+  published: PublicationListItem[];
+  failed: PublicationListItem[];
+};
+
+/** Publication shown in the post detail (Tela 04). */
+export type LivePublication = {
+  id: string;
+  status: PublicationStatus;
+  scheduledAt: Date;
+  timezone: string;
+  attempts: number;
+  lastErrorCode: string | null;
+  lastError: string | null;
+};
