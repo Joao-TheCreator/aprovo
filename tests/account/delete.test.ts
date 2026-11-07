@@ -5,15 +5,20 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   approvalDecisions,
+  approvalLinkOpens,
   approvalLinks,
   approvalRequests,
+  instagramConnections,
   mediaAssets,
   posts,
+  profiles,
+  publications,
   sessions,
   users,
   workspaceMembers,
   workspaces,
 } from "@/db/schema";
+import { encrypt } from "@/lib/crypto/secretbox";
 import { deleteAccount } from "@/lib/account/delete";
 import { getCurrentWorkspace } from "@/lib/auth/require";
 import { makeTempStorage, seedWorkspace } from "../media/helpers";
@@ -94,6 +99,63 @@ describe("deleteAccount", () => {
   it("getCurrentWorkspace skips deleted workspaces", async () => {
     const { user, ws } = await seedWorkspace("skip@x.co");
     await db.update(workspaces).set({ deletedAt: new Date() }).where(eq(workspaces.id, ws.id));
+    expect(await getCurrentWorkspace(user.id)).toBeNull();
+  });
+
+  it("deletes with Fase 6 rows in place (connection, scheduled publication, link opens)", async () => {
+    process.env.AUTH_SECRET ||= "test-secret";
+    const { user, ws, profile } = await seedWorkspace("dona@x.co");
+    const [conn] = await db
+      .insert(instagramConnections)
+      .values({
+        workspaceId: ws.id,
+        igUserId: "ig-del",
+        username: "cliente",
+        accessTokenEnc: encrypt("TOKEN"),
+        tokenExpiresAt: new Date(Date.now() + 86_400_000),
+        scopes: ["instagram_business_basic", "instagram_business_content_publish"],
+        connectedBy: user.id,
+      })
+      .returning();
+    await db.update(profiles).set({ connectionId: conn.id }).where(eq(profiles.id, profile.id));
+    const [post] = await db
+      .insert(posts)
+      .values({ profileId: profile.id, position: 1, caption: "agendado", status: "scheduled" })
+      .returning();
+    const [pub] = await db
+      .insert(publications)
+      .values({
+        postId: post.id,
+        profileId: profile.id,
+        connectionId: conn.id,
+        scheduledAt: new Date(Date.now() + 3_600_000),
+        nextAttemptAt: new Date(Date.now() + 3_600_000),
+        createdBy: user.id,
+      })
+      .returning();
+    const [req] = await db.insert(approvalRequests).values({ profileId: profile.id }).returning();
+    const [link] = await db
+      .insert(approvalLinks)
+      .values({
+        requestId: req.id,
+        tokenHash: "d".repeat(64),
+        recipientName: "Carlos",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      })
+      .returning();
+    await db
+      .insert(approvalLinkOpens)
+      .values({ linkId: link.id, ip: "127.0.0.1", userAgent: "ua", linkState: "active" });
+
+    const res = await deleteAccount(user.id, { deferPurge: true });
+    expect(res.workspaceIds).toEqual([ws.id]);
+    expect(await db.select().from(instagramConnections)).toHaveLength(0);
+    const [p] = await db.select().from(publications).where(eq(publications.id, pub.id));
+    expect(p.connectionId).toBeNull();
+    expect(p.createdBy).toBeNull();
+    const [pr] = await db.select().from(profiles).where(eq(profiles.id, profile.id));
+    expect(pr.connectionId).toBeNull();
+    expect(await db.select().from(approvalLinkOpens)).toHaveLength(1);
     expect(await getCurrentWorkspace(user.id)).toBeNull();
   });
 });

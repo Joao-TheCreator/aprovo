@@ -20,7 +20,7 @@ import { getStorage, type Storage } from "@/lib/storage";
  */
 export async function deleteAccount(
   userId: string,
-  opts: { db?: Database; storage?: Storage } = {},
+  opts: { db?: Database; storage?: Storage; deferPurge?: boolean } = {},
 ): Promise<{ workspaceIds: string[]; storageErrors: number }> {
   const db = opts.db ?? defaultDb;
   const workspaceIds = await db.transaction(async (tx) => {
@@ -49,11 +49,14 @@ export async function deleteAccount(
     return ids;
   });
 
+  // Storage purge can take long (one DELETE per object); callers on serverless defer it
+  // with next/server `after()` so the request answers at once (see deleteAccountAction).
+  if (opts.deferPurge) return { workspaceIds, storageErrors: 0 };
   const storageErrors = await purgeWorkspaceMedia(db, workspaceIds, opts.storage);
   return { workspaceIds, storageErrors };
 }
 
-async function purgeWorkspaceMedia(
+export async function purgeWorkspaceMedia(
   db: Database,
   workspaceIds: string[],
   storage: Storage = getStorage(),

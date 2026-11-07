@@ -1,7 +1,9 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +22,19 @@ export function DeleteAccountButton() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
+  const router = useRouter();
+  const confirmed = text.trim().toUpperCase() === "EXCLUIR";
+  function run() {
+    start(async () => {
+      const res = await deleteAccountAction();
+      if (res.ok) {
+        router.replace("/entrar?deleted=1");
+        router.refresh();
+      } else {
+        toast.error(res.message);
+      }
+    });
+  }
   return (
     <Dialog
       open={open}
@@ -56,17 +71,14 @@ export function DeleteAccountButton() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             autoComplete="off"
+            autoCapitalize="characters"
           />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
             Cancelar
           </Button>
-          <Button
-            variant="destructive"
-            disabled={pending || text !== "EXCLUIR"}
-            onClick={() => start(() => deleteAccountAction())}
-          >
+          <Button variant="destructive" disabled={pending || !confirmed} onClick={run}>
             {pending ? "Excluindo…" : "Excluir definitivamente"}
           </Button>
         </DialogFooter>
