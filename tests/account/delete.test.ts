@@ -152,7 +152,8 @@ describe("deleteAccount", () => {
     expect(await db.select().from(instagramConnections)).toHaveLength(0);
     const [p] = await db.select().from(publications).where(eq(publications.id, pub.id));
     expect(p.connectionId).toBeNull();
-    expect(p.createdBy).toBeNull();
+    // The user row is anonymized, not deleted, so created_by keeps pointing at it.
+    expect(p.createdBy).toBe(user.id);
     const [pr] = await db.select().from(profiles).where(eq(profiles.id, profile.id));
     expect(pr.connectionId).toBeNull();
     expect(await db.select().from(approvalLinkOpens)).toHaveLength(1);
