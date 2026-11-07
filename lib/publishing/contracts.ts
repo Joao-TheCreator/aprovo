@@ -82,3 +82,40 @@ export type ReschedulePublicationInput = z.infer<typeof reschedulePublicationSch
 
 export const cancelPublicationSchema = z.object({ postId: z.string().uuid() });
 export type CancelPublicationInput = z.infer<typeof cancelPublicationSchema>;
+
+export type PublishValidationCode =
+  "media_rejected" | "no_media" | "too_many_items" | "media_not_ready" | "unsupported_type";
+
+/** One problem found before scheduling or publishing. `message` is shown to the user (pt-BR). */
+export type PublishValidationIssue = {
+  code: PublishValidationCode;
+  message: string;
+  assetId?: string;
+};
+
+export type PreparedMediaItem = {
+  assetId: string;
+  kind: "image" | "video";
+  /** Signed read URL (short-lived). Never persist or log it. */
+  url: string;
+  /** Video cover (signed), when the asset has a poster. */
+  coverUrl?: string;
+  width: number | null;
+  height: number | null;
+};
+
+export type PreparedMedia = {
+  kind: "post" | "video";
+  caption: string;
+  items: PreparedMediaItem[];
+};
+
+/** Thrown by `preparePostMedia` when the post cannot be sent to Instagram as is. */
+export class PublishValidationError extends Error {
+  readonly issues: PublishValidationIssue[];
+  constructor(issues: PublishValidationIssue[]) {
+    super(issues.map((i) => i.message).join(" "));
+    this.name = "PublishValidationError";
+    this.issues = issues;
+  }
+}

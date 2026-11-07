@@ -16,7 +16,7 @@ export interface Storage {
   headObject(key: string): Promise<{ size: number; contentType: string } | null>;
 }
 
-export type StoragePrefix = "originals" | "previews" | "thumbs" | "ig-cache";
+export type StoragePrefix = "originals" | "previews" | "thumbs" | "ig-cache" | "publish";
 
 /** Key layout from docs/03 section 6: `<prefix>/<workspace_id>/<asset_id>/<filename>`. */
 export function storageKey(
