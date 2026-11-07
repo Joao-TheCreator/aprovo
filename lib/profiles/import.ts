@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { importedPosts, profiles, profileSnapshots } from "@/db/schema";
 import { downloadImage } from "@/lib/instagram/download";
-import { getInstagramProviderForWorkspace } from "@/lib/instagram";
+import { getInstagramProviderForProfile } from "@/lib/instagram";
 import type { IgError, IgMedia, IgProfile } from "@/lib/instagram/types";
 import { isIgError } from "@/lib/instagram/types";
 import { NO_BUSINESS_DISCOVERY_MESSAGE } from "./contracts";
@@ -82,7 +82,7 @@ export async function importProfileFromProvider(profileId: string): Promise<Impo
 
   let data: IgProfile;
   try {
-    const provider = await getInstagramProviderForWorkspace(profile.workspaceId);
+    const provider = await getInstagramProviderForProfile(profile);
     const res = await provider.fetchProfile(profile.igUsername);
     if (isIgError(res)) return await failImport(profileId, res);
     data = res;

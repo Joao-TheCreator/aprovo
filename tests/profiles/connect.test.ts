@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/instagram", async (orig) => ({
   ...(await orig<typeof import("@/lib/instagram")>()),
   getInstagramProvider: () => mocks.provider,
-  getInstagramProviderForWorkspace: async () => mocks.provider,
+  getInstagramProviderForProfile: async () => mocks.provider,
 }));
 vi.mock("@/lib/instagram/download", () => ({ downloadImage: mocks.download }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
