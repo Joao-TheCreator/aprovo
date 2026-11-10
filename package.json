@@ -18,7 +18,9 @@
     "db:migrate": "tsx db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "icons:generate": "tsx scripts/generate-icons.ts",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "reviewer:hash": "tsx scripts/reviewer.ts hash",
+    "reviewer:revoke": "tsx scripts/reviewer.ts revoke"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",

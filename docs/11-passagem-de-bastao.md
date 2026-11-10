@@ -125,3 +125,11 @@ com `instagram_business_content_publish`.
   deploys com cron mais frequente).
 - Pendente: App Review da permissão de publicar (docs/10 §9) e a conta do Samuel reconectar
   pelo próprio login.
+
+## Acesso de revisor (10/11/2026)
+
+- Implementado o login por e-mail e senha para o revisor da Meta (docs/10 §9.0): formulário em
+  `/entrar`, ligado por `REVIEWER_LOGIN_ENABLED`, `REVIEWER_EMAIL` e `REVIEWER_PASSWORD_HASH`.
+  Scripts `pnpm reviewer:hash` e `pnpm reviewer:revoke`.
+- Pendente (João): gerar o hash, cadastrar as três variáveis na Vercel, Redeploy, preparar o
+  workspace do revisor e submeter o App Review.

@@ -41,7 +41,6 @@ export default async function OpengraphImage() {
       }}
     >
       {logoSrc ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img src={logoSrc} width={275} height={120} alt="" />
       ) : (
         <div style={{ fontSize: 64, fontWeight: 800 }}>aprovo</div>

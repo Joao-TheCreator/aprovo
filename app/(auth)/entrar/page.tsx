@@ -3,8 +3,9 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { googleEnabled } from "@/lib/auth/config";
+import { reviewerLoginEnabled } from "@/lib/auth/reviewer";
 import { AuthScreen, GoogleIcon } from "../_components/AuthScreen";
-import { signInWithEmail, signInWithGoogle } from "./actions";
+import { signInAsReviewer, signInWithEmail, signInWithGoogle } from "./actions";
 
 const ERRORS: Record<string, string> = {
   InvalidEmail: "Esse e-mail não parece certo. Confere e tenta de novo.",
@@ -13,6 +14,8 @@ const ERRORS: Record<string, string> = {
   AccessDenied: "Acesso negado. Se acha que é engano, fala com a gente.",
   Configuration: "O login está com problema de configuração. Avisa o suporte.",
   OAuthAccountNotLinked: "Esse e-mail já entra de outro jeito. Use o método de sempre.",
+  ReviewerSignin: "Reviewer login failed: check the e-mail and password provided for the review.",
+  ReviewerRateLimited: "Too many attempts. Wait a minute and try again.",
 };
 const DEFAULT_ERROR = "Não rolou entrar. Tenta de novo.";
 
@@ -83,6 +86,46 @@ export default async function EntrarPage({
           <ArrowRight />
         </Button>
       </form>
+
+      {reviewerLoginEnabled() ? (
+        <details
+          className="border-border rounded-2xl border px-4 py-3"
+          open={error?.startsWith("Reviewer")}
+        >
+          <summary className="text-caption text-muted-foreground cursor-pointer select-none">
+            Reviewer access (Meta App Review)
+          </summary>
+          <form action={signInAsReviewer} className="mt-3 space-y-3" lang="en">
+            <p className="text-micro text-muted-foreground">
+              Use the e-mail and password provided in the review notes.
+            </p>
+            <label htmlFor="reviewer-email" className="text-caption block">
+              E-mail
+            </label>
+            <Input
+              id="reviewer-email"
+              name="email"
+              type="email"
+              required
+              autoComplete="username"
+              inputMode="email"
+            />
+            <label htmlFor="reviewer-password" className="text-caption block">
+              Password
+            </label>
+            <Input
+              id="reviewer-password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+            />
+            <Button type="submit" variant="secondary" className="w-full">
+              Sign in as reviewer
+            </Button>
+          </form>
+        </details>
+      ) : null}
     </AuthScreen>
   );
 }

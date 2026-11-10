@@ -144,16 +144,51 @@ sem revisão; para qualquer cliente de fora é preciso o **App Review** com **Ac
 Os nomes de menus da Meta mudam: **[≈]** marca o que pode estar com outro nome. Nada daqui foi
 conferido no painel (a rede da sessão não acessa `developers.facebook.com`).
 
-> **Atenção, o login do revisor.** O revisor da Meta precisa entrar no APROVO sozinho. Hoje o
-> login é por link mágico (Resend com `onboarding@resend.dev`, que só entrega ao dono da conta) ou
-> Google (modo Testando, só e-mails da lista). **Nenhum dos dois serve a um revisor anônimo.**
-> Antes de submeter, o João precisa decidir uma destas saídas **[confirmar]**: (a) verificar um
-> domínio no Resend e criar uma caixa de e-mail de revisão cujo acesso é informado ao revisor
-> (o link mágico chega nela);
-> (b) pedir a uma sessão do Claude Code um "acesso de revisor" temporário (por exemplo, login por
-> e-mail e senha só para uma conta de teste, desligável por variável de ambiente); (c) publicar o
-> app do Google em produção e informar uma conta Google de teste. A opção (b) é a mais confiável
-> para o App Review e não faz parte do código atual.
+> **Login do revisor: resolvido com o "acesso de revisor" (implementado em 10/11/2026).** O
+> revisor da Meta entra com e-mail e senha, sem depender do Resend nem da lista de testadores do
+> Google. O formulário só aparece em `/entrar` quando o acesso está ligado por variáveis de
+> ambiente, e pode ser desligado assim que a revisão terminar. Ver 9.0.
+
+### 9.0 Acesso de revisor (e-mail e senha temporários)
+
+Como funciona: um único login por e-mail e senha, validado contra variáveis de ambiente (a senha
+fica só como hash scrypt). No primeiro acesso o APROVO cria um usuário comum chamado "Revisor
+Meta", com workspace próprio, e emite uma sessão normal de 7 dias. Tentativas erradas são
+limitadas a 5 por minuto por IP. Nenhum outro usuário é afetado.
+
+Para ligar (antes de submeter o App Review):
+
+1. Escolher uma senha com 12 ou mais caracteres e gerar o hash na sua máquina, dentro do repo:
+
+```bash
+pnpm reviewer:hash "<senha>"
+```
+
+2. Na Vercel (Production), cadastrar e fazer **Redeploy**:
+
+| Variável | Valor |
+|---|---|
+| `REVIEWER_LOGIN_ENABLED` | `true` |
+| `REVIEWER_EMAIL` | um endereço fictício, ex.: `reviewer@aprovo.app` (nunca recebe e-mail) |
+| `REVIEWER_PASSWORD_HASH` | a saída do comando acima (começa com `scrypt:`) |
+
+3. Testar: abrir `https://aprovo-six.vercel.app/entrar`, expandir **"Reviewer access (Meta App
+   Review)"**, entrar com o e-mail e a senha. Deve cair em `/perfis` com o workspace "Revisão Meta".
+4. Preparar o ambiente do revisor nesse workspace: conectar a conta profissional de teste e
+   deixar um rascunho "Post de teste" pronto (passos 2 e 3 das instruções em 9.4). A conexão
+   fica no workspace do revisor, então faça isso **logado como revisor**.
+5. No formulário da Meta, informar o e-mail e a senha no campo de credenciais de teste (nunca
+   neste repositório).
+
+Para desligar (depois da revisão): remover `REVIEWER_LOGIN_ENABLED` na Vercel, fazer Redeploy e
+encerrar as sessões abertas:
+
+```bash
+REVIEWER_EMAIL=reviewer@aprovo.app DATABASE_URL='<string do Neon>' pnpm reviewer:revoke
+```
+
+Se quiser apagar o workspace do revisor, entre como revisor antes de desligar e use
+Configurações › Excluir conta.
 
 ### 9.1 Passo a passo no painel da Meta
 
